@@ -31,5 +31,5 @@ spec:
       # The secretstores.external-secrets.io / clustersecretstores.external-secrets.io
       # CRDs are large enough that client-side apply's last-applied-configuration
       # annotation exceeds the 262144-byte limit (same issue hit installing
-      # ArgoCD's own CRDs — see docs/INFRA_K3D_EKS.md). Server-side apply avoids it.
+      # ArgoCD's own CRDs — see ../../argocd/README.md). Server-side apply avoids it.
       - ServerSideApply=true

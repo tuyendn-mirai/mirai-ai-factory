@@ -7,8 +7,8 @@
 # path/tên chart trong registry đó.
 #
 # Chưa Healthy ngay sau khi apply: Deployment cần 2 Secret chưa tồn tại
-# (litellm-db-credentials, litellm-env-secrets) — sẽ do ExternalSecret tạo
-# (mục 8, docs/INFRA_K3D_EKS.md, chưa làm).
+# (litellm-db-credentials, litellm-env-secrets) — do external-secret.yaml
+# (cùng thư mục này) tạo, xem README.md.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,0 +1,67 @@
+# Local Kubernetes (mô phỏng EKS) — hạ tầng
+
+Một cụm Kubernetes local bằng k3d, mô phỏng đặc điểm vận hành của AWS EKS,
+phục vụ test GitOps (ArgoCD) trước khi lên môi trường thật. Mỗi thư mục con
+có README riêng ghi lại từng bước đã làm cho phần đó — cập nhật theo từng
+bước đã triển khai, không viết trước phần chưa làm.
+
+## Cài CLI
+
+Cài trên Linux x86_64: `k3d`, `kubectl`, `helm`, `argocd`.
+
+```bash
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install kubectl /usr/local/bin/kubectl
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+sudo install argocd /usr/local/bin/argocd
+```
+
+**Lưu ý:** chạy các lệnh `curl -LO` / `curl -sSL -o` từ trong thư mục repo sẽ
+tải binary ngay vào working directory. Đã xảy ra với `argocd` (249MB) và
+`kubectl` (59MB) bị rơi vào root repo — đã xoá vì bản cài thật nằm ở
+`/usr/local/bin`. Lần sau nên `cd /tmp` hoặc `cd ~/Downloads` trước khi tải.
+
+Verify:
+
+```bash
+k3d version            # v5.9.0 / k3s v1.35.5-k3s1
+kubectl version --client   # v1.36.4
+helm version            # v3.21.4
+argocd version --client    # v3.5.1
+```
+
+## Cấu trúc thư mục
+
+```
+infra/
+├── cluster/        # config cụm k3d mô phỏng EKS
+├── storageclass/    # StorageClass gp2 (thay local-path mặc định)
+├── ingress/         # Helm values cho ingress-nginx CONTROLLER dùng chung
+│                    # (điểm vào duy nhất — không còn 1 file Ingress/app ở đây,
+│                    # xem lý do trong infra/apps/README.md)
+├── argocd/          # Manifest cài ArgoCD (pinned) + Ingress riêng của nó
+│                    # (ArgoCD không phải Helm chart nên không có infra/apps/argocd/)
+└── apps/            # Mỗi app cài qua Helm/ArgoCD — xem infra/apps/README.md
+    ├── external-secrets/
+    └── litellm/
+```
+
+Xem README trong từng thư mục con để biết chi tiết cách dựng.
+
+## Việc tiếp theo (chưa làm)
+
+- [ ] Seed secret thật vào LocalStack cho các app khác (Langfuse, Langflow)
+      — thay cho giá trị đang nằm trong `.env` đã bị commit (cảnh báo bảo
+      mật đang treo, chưa xử lý)
+- [ ] Deploy Langfuse vào `mirai-eks` (hoặc trỏ `LANGFUSE_HOST=
+      http://host.k3d.internal:<port>` giống pattern LocalStack) rồi bật lại
+      `success_callback`/`failure_callback` trong `proxy_config` của LiteLLM
+- [ ] Deploy Langflow (Tầng 4) qua ArgoCD, trỏ vào `http://litellm.litellm.svc.cluster.local:4000`
+- [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công
+      (`infra/argocd/argocd-ingress.yaml`,
+      `infra/apps/external-secrets/clustersecretstore.yaml`,
+      `infra/apps/litellm/external-secret.yaml`) bằng chính ArgoCD
+      (app-of-apps hoặc thêm làm source thứ 3 trong multi-source Application)
+      thay vì `kubectl apply` thủ công

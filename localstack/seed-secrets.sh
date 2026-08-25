@@ -2,7 +2,7 @@
 # Seed lại secret vào LocalStack Secrets Manager sau MỖI lần
 # `docker compose up` container localstack — LocalStack Community (không có
 # LOCALSTACK_AUTH_TOKEN) không hỗ trợ persistence dù đã set PERSISTENCE=1 +
-# mount volume (tính năng trả phí, xem docs/INFRA_K3D_EKS.md mục LocalStack).
+# mount volume (tính năng trả phí — xem README.md trong cùng thư mục này).
 # Container restart (kể cả do máy/docker daemon restart, không phải mình
 # chủ động) là mất sạch secret — chạy lại script này để tạo lại, idempotent
 # (create nếu chưa có, update nếu đã có).

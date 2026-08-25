@@ -50,8 +50,8 @@ securityContext: {}
 #  pod as environment variables.  These secrets can then be referenced in the
 #  configuration file (or "litellm" ConfigMap) with `os.environ/<Env Var Name>`
 #
-# litellm-env-secrets: chưa tồn tại — sẽ do một ExternalSecret tạo ra (mục 8,
-# docs/INFRA_K3D_EKS.md, chưa làm), chứa REDIS_HOST/REDIS_PORT/REDIS_PASSWORD/
+# litellm-env-secrets: tạo bởi ExternalSecret (xem external-secret.yaml
+# trong cùng thư mục này), chứa REDIS_HOST/REDIS_PORT/REDIS_PASSWORD/
 # REDIS_DB. Chart này không có chỗ nào khác để bơm các biến đó khi
 # redis.enabled=false (dùng Redis ngoài thay vì subchart), nên phải đi qua
 # envFrom dù REDIS_HOST/REDIS_PORT không thực sự là secret.
@@ -62,21 +62,22 @@ service:
   type: ClusterIP
   port: 4000
 
+# Trước dùng file riêng infra/ingress/litellm-ingress.yaml (kubectl apply
+# thủ công, theo convention cũ "mỗi app 1 file trong infra/ingress/"). Bỏ
+# convention đó — chart này tự hỗ trợ ingress.enabled nên để ArgoCD quản lý
+# luôn, không cần file/kubectl apply tách rời nữa. ssl-redirect: "false" vì
+# service phục vụ HTTP thuần (không như argocd-server tự serve TLS).
 ingress:
-  enabled: false
+  enabled: true
   className: "nginx"
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
   hosts:
-    - host: api.example.local
+    - host: litellm.mirai.local
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
   tls: []
-  #  - secretName: chart-example-tls
-  #    hosts:
-  #      - chart-example.local
 
 # Chart tự tạo Secret <release>-masterkey trực tiếp từ giá trị này (xem
 # templates/secret-masterkey.yaml) — KHÔNG có field nào để trỏ ra Secret có
@@ -84,7 +85,7 @@ ingress:
 # hỗ trợ). Để trống thì chart tự random 1 giá trị MỚI mỗi lần `helm
 # template` chạy lại — ArgoCD selfHeal sẽ liên tục apply lại, đổi master key
 # ngẫu nhiên. Quyết định: chấp nhận plaintext ở đây cho POC local (giống rủi
-# ro đang có sẵn với .env, đã flag trong docs/INFRA_K3D_EKS.md) — xem lại
+# ro đang có sẵn với .env gốc repo đã bị commit) — xem lại
 # khi lên EKS thật.
 masterkey: "Adgjmptw1"
 
@@ -138,7 +139,7 @@ proxy_config:
     # Chưa bật: Langfuse hiện chỉ chạy qua docker-compose ở gốc repo, chưa
     # deploy vào mirai-eks. Muốn bật lại cần: (1) deploy Langfuse vào cluster
     # hoặc trỏ LANGFUSE_HOST=http://host.k3d.internal:<port> giống pattern
-    # LocalStack (mục 7, docs/INFRA_K3D_EKS.md), (2) thêm LANGFUSE_PUBLIC_KEY/
+    # LocalStack (xem ../../../localstack/README.md), (2) thêm LANGFUSE_PUBLIC_KEY/
     # LANGFUSE_SECRET_KEY/LANGFUSE_HOST vào litellm-env-secrets.
     # success_callback: ["langfuse"]
     # failure_callback: ["langfuse"]
@@ -197,14 +198,13 @@ db:
   # enp5s0 — có thể đổi): Postgres này thực chất là container docker-compose
   # CHẠY NGAY TRÊN máy đang host cụm k3d này (không phải server khác), nên
   # dùng đúng hostname k3d tự tạo trỏ về gateway của host — cùng pattern
-  # LocalStack ở mục 7, docs/INFRA_K3D_EKS.md. Đã verify bằng `psql` thật từ
-  # 1 pod trong cluster trước khi đổi.
+  # LocalStack (xem ../../../localstack/README.md). Đã verify bằng `psql`
+  # thật từ 1 pod trong cluster trước khi đổi.
   endpoint: "host.k3d.internal:5435"
   database: "ai_factory?schema=litellm"
   secret:
-    # litellm-db-credentials: chưa tồn tại — sẽ do một ExternalSecret tạo ra
-    # (mục 8, docs/INFRA_K3D_EKS.md, chưa làm), với 2 key username/password
-    # đúng tên bên dưới.
+    # litellm-db-credentials: tạo bởi ExternalSecret (xem external-secret.yaml
+    # trong cùng thư mục này), với 2 key username/password đúng tên bên dưới.
     name: litellm-db-credentials
     usernameKey: username
     passwordKey: password
