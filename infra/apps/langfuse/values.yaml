@@ -149,7 +149,19 @@ langfuse:
     pullSecrets: []
 
   # -- List of additional environment variables to be added to all langfuse deployments. See [documentation](https://langfuse.com/docs/deployment/self-host#configuring-environment-variables) for details.
-  additionalEnv: []
+  #
+  # LANGFUSE_MIGRATION_V4_WRITE_MODE=dual: Langfuse v4 (appVersion của chart
+  # này) mặc định chạy "events_only mode", từ chối event gửi qua endpoint cũ
+  # /api/public/ingestion — mà LiteLLM (infra/apps/litellm/) vẫn đang dùng
+  # (tự bắt được qua log web: "Rejected N event(s) from the legacy
+  # /api/public/ingestion endpoint ... this Langfuse v4 deployment runs in
+  # events_only mode"). `dual` là cầu nối tạm Langfuse tự đề xuất trong log —
+  # bật lại ghi theo cả 2 format cho tới khi LiteLLM cập nhật SDK tương
+  # thích v4. Xem
+  # https://langfuse.com/self-hosting/upgrade/upgrade-guides/upgrade-v3-to-v4
+  additionalEnv:
+    - name: LANGFUSE_MIGRATION_V4_WRITE_MODE
+      value: "dual"
   # -- Secrets or ConfigMap of additional environment variables to be added to all langfuse deployments. See [documentation](https://langfuse.com/docs/deployment/self-host#configuring-environment-variables) for details.
   additionalEnvFrom: []
   # -- Allows additional containers to be added to all langfuse deployments
