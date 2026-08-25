@@ -86,7 +86,7 @@ ingress:
 # ngẫu nhiên. Quyết định: chấp nhận plaintext ở đây cho POC local (giống rủi
 # ro đang có sẵn với .env, đã flag trong docs/INFRA_K3D_EKS.md) — xem lại
 # khi lên EKS thật.
-masterkey: "sk-mirai-local"
+masterkey: "Adgjmptw1"
 
 # The elements within proxy_config are rendered as config.yaml for the proxy
 #  Examples: https://github.com/BerriAI/litellm/tree/main/litellm/proxy/example_config_yaml

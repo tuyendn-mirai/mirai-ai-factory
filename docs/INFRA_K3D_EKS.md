@@ -372,17 +372,150 @@ Trạng thái hiện tại: LocalStack chạy ngoài cluster, `secretsmanager`
 available, pod trong `mirai-eks` gọi được qua `http://host.k3d.internal:4566`.
 Chưa nối `external-secrets` (mục 6) vào LocalStack này qua `SecretStore`.
 
-## 8. Việc tiếp theo (chưa làm)
+## 8. ClusterSecretStore trỏ external-secrets vào LocalStack
 
-- [ ] Tạo `SecretStore`/`ClusterSecretStore` trỏ external-secrets vào
-      `http://host.k3d.internal:4566` (provider `aws`, service
-      `SecretsManager`, access key giả `test`/`test`)
-- [ ] Seed secret thật vào LocalStack (thay cho giá trị đang nằm trong
-      `.env` đã bị commit — xem cảnh báo bảo mật đang treo, chưa xử lý)
-- [ ] Viết `ExternalSecret` cho LiteLLM (`LITELLM_MASTER_KEY`,
-      `DATABASE_URL`, `REDIS_PASSWORD`...) theo convention
-      `infra/apps/<name>/`
-- [ ] Deploy LiteLLM lên `mirai-eks` qua ArgoCD (Helm `litellm-helm`),
-      dùng Secret do `external-secrets` sync ra thay vì giá trị plaintext
-- [ ] Cân nhắc quản lý các manifest ở `infra/ingress/*.yaml` bằng chính
-      ArgoCD (app-of-apps) thay vì `kubectl apply` thủ công
+Manifest: [`infra/apps/external-secrets/clustersecretstore-localstack.yaml`](../infra/apps/external-secrets/clustersecretstore-localstack.yaml)
+— áp dụng bằng `kubectl apply` thường (giống `infra/ingress/*.yaml`, KHÔNG
+qua ArgoCD Application/Helm), gồm 2 resource:
+
+- Secret `localstack-aws-creds` (namespace `external-secrets`) chứa access
+  key/secret key giả `test`/`test` — tạo tay bằng `kubectl`, không qua
+  ExternalSecret (gà-trứng: đây chính là credential để ExternalSecret gọi ra
+  ngoài, cùng lý do repo-credential secret ở mục 6 cũng tạo tay).
+- `ClusterSecretStore` tên `localstack`, `provider.aws.service:
+  SecretsManager`, `region: ap-northeast-1`, auth trỏ vào secret ở trên.
+
+**CRD không có field `endpoint` trong `spec.provider.aws`** (đã kiểm tra
+bằng `kubectl explain clustersecretstore.spec.provider.aws` — không có, dù
+một số ví dụ tìm được trên mạng cho là có). Endpoint LocalStack phải trỏ qua
+biến môi trường **controller-level** `AWS_SECRETSMANAGER_ENDPOINT` (field
+`extraEnv` trong [`infra/apps/external-secrets/values.yaml`](../infra/apps/external-secrets/values.yaml)),
+ảnh hưởng TẤT CẢ SecretStore/ClusterSecretStore dùng service SecretsManager
+trong cluster — không set riêng per-store được.
+
+Verify:
+
+```bash
+kubectl get clustersecretstore localstack
+# CAPABILITIES: Ready=True
+```
+
+## 9. ExternalSecret + LiteLLM (Tầng 3) lên `mirai-eks` qua ArgoCD
+
+### Secret nguồn trong LocalStack
+
+`mirai/litellm` (tạo ở mục 7) chứa field rời khớp đúng key ExternalSecret sẽ
+trích ra — KHÔNG bundle thành 1 chuỗi connection-string:
+`username`, `password`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`,
+`REDIS_DB`.
+
+### ExternalSecret
+
+Manifest: [`infra/apps/litellm/external-secret.yaml`](../infra/apps/litellm/external-secret.yaml)
+— 2 `ExternalSecret` (namespace `litellm`), áp dụng bằng `kubectl apply`
+thường (không qua ArgoCD, cùng lý do như ClusterSecretStore ở mục 8):
+
+- `litellm-db-credentials`: trích `username`/`password` → khớp
+  `db.secret.usernameKey/passwordKey` trong values.yaml của chart.
+- `litellm-env-secrets`: trích `REDIS_HOST/REDIS_PORT/REDIS_PASSWORD/REDIS_DB`
+  → bơm vào pod qua `environmentSecrets` (envFrom) vì chart không có cách nào
+  khác để set các biến này khi `redis.enabled: false` (dùng Redis ngoài).
+
+Verify:
+
+```bash
+kubectl get externalsecret -n litellm
+# STATUS: SecretSynced, READY: True cho cả 2
+```
+
+### App LiteLLM (Helm `litellm-helm`)
+
+[`infra/apps/litellm/values.yaml`](../infra/apps/litellm/values.yaml) +
+[`infra/apps/litellm/application.yaml`](../infra/apps/litellm/application.yaml)
+— chart OCI `oci://ghcr.io/berriai/litellm-helm` (ArgoCD khai báo OCI bằng
+`repoURL` KHÔNG có tiền tố `oci://`).
+
+Quyết định thiết kế đáng chú ý:
+
+- **Master key plaintext**: chart tự tạo Secret `<release>-masterkey` từ
+  `values.masterkey` trực tiếp (`templates/secret-masterkey.yaml`) — KHÔNG
+  có field nào để trỏ ra Secret có sẵn do ExternalSecret quản lý (khác với
+  `db.secret.name`, cái đó CÓ hỗ trợ). Để trống thì chart random 1 giá trị
+  MỚI mỗi lần `helm template` chạy → ArgoCD `selfHeal` liên tục đổi master
+  key. Chấp nhận đặt plaintext trong `values.yaml` (rủi ro tương tự `.env`
+  đã flag ở mục 7) — xem lại khi lên EKS thật.
+- `db.database: "ai_factory?schema=litellm"` — ghép thẳng query string vào
+  field này vì `DATABASE_URL` của chart chỉ nối chuỗi
+  `postgresql://user:pass@endpoint/database`.
+- `proxy_config` port riêng từ `layer3-litellm/config.yaml`, KHÔNG sửa file
+  gốc đó — hai nơi set tên biến môi trường khác nhau cho cùng giá trị
+  (docker-compose: `LITELLM_MASTER_KEY`; chart: luôn `PROXY_MASTER_KEY`).
+- Langfuse (`success_callback`/`failure_callback`) tạm COMMENT OUT trong
+  `proxy_config` — Langfuse chưa deploy vào `mirai-eks`, chỉ chạy qua
+  docker-compose ở gốc repo.
+
+**Bug của chart (mọi version tính đến `0.1.100`):** initContainer
+`db-ready` hard-code cứng image
+`docker.io/bitnami/postgresql:16.1.0-debian-11-r20` thẳng trong
+`templates/deployment.yaml` — KHÔNG đọc `values.image.dbReadyImage/dbReadyTag`
+(2 field đó tồn tại trong `values.yaml` nhưng chart không dùng, dead value).
+Tag đó đã bị Bitnami gỡ khỏi Docker Hub (confirm bằng `docker pull` thật —
+`not found`), không sửa được qua `values.yaml`. Xử lý:
+
+```bash
+kubectl patch deployment litellm -n litellm --type='json' \
+  -p='[{"op":"replace","path":"/spec/template/spec/initContainers/0/image","value":"docker.io/postgres:16-alpine"}]'
+```
+
++ thêm `ignoreDifferences` vào `application.yaml` (path
+`/spec/template/spec/initContainers/0/image`) để `selfHeal` không ghi đè lại
+image gốc đã hỏng mỗi lần reconcile. Đã verify: `argocd app get litellm
+--refresh` báo `Synced`/`Healthy` dù live image khác chart gốc.
+
+Script wait-for-db bên trong initContainer đó cũng có bug riêng (không liên
+quan bug image): dùng `psql -h $(DATABASE_HOST)` với `DATABASE_HOST` chứa cả
+port (`172.16.0.191:5435`) → `psql` không tự tách port ra được, luôn báo lỗi
+DNS. Vô hại vì script không có `exit $ret` ở cuối — dù thất bại đủ 60 lần
+(~120s) vẫn thoát mã 0, container chính vẫn chạy tiếp bình thường.
+
+Verify:
+
+```bash
+kubectl get pods -n litellm            # 1/1 Running
+argocd app get litellm --grpc-web      # Synced, Healthy
+```
+
+### Ingress
+
+Manifest: [`infra/ingress/litellm-ingress.yaml`](../infra/ingress/litellm-ingress.yaml)
+— cùng pattern `argocd-ingress.yaml` (mục 5), host `litellm.mirai.local` →
+`127.0.0.1` trong `/etc/hosts` (cùng lưu ý: mất khi agent restart, xem mục
+5). Service `litellm` phục vụ HTTP thuần (không như `argocd-server`), không
+cần annotation backend-protocol.
+
+Verify:
+
+```bash
+curl http://litellm.mirai.local/health/readiness
+# {"status":"healthy","db":"connected"}
+```
+
+Trạng thái hiện tại: LiteLLM chạy trong `mirai-eks`, DB/Redis nối vào server
+ngoài đã có sẵn, model_list dùng Ollama, đọc credential qua ExternalSecret từ
+LocalStack (trừ master key — plaintext, xem trên). Reachable qua
+`http://litellm.mirai.local/`.
+
+## 10. Việc tiếp theo (chưa làm)
+
+- [ ] Seed secret thật vào LocalStack cho các app khác (Langfuse, Langflow)
+      — thay cho giá trị đang nằm trong `.env` đã bị commit (cảnh báo bảo
+      mật đang treo, chưa xử lý)
+- [ ] Deploy Langfuse vào `mirai-eks` (hoặc trỏ `LANGFUSE_HOST=
+      http://host.k3d.internal:<port>` giống pattern LocalStack) rồi bật lại
+      `success_callback`/`failure_callback` trong `proxy_config` của LiteLLM
+- [ ] Deploy Langflow (Tầng 4) qua ArgoCD, trỏ vào `http://litellm.litellm.svc.cluster.local:4000`
+- [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công (`infra/ingress/*.yaml`,
+      `infra/apps/external-secrets/clustersecretstore-localstack.yaml`,
+      `infra/apps/litellm/external-secret.yaml`) bằng chính ArgoCD
+      (app-of-apps hoặc thêm làm source thứ 3 trong multi-source Application)
+      thay vì `kubectl apply` thủ công

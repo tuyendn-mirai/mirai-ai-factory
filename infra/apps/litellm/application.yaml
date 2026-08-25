@@ -35,3 +35,17 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+  # Bug của chart litellm-helm (mọi version tính đến 0.1.100): initContainer
+  # "db-ready" hard-code image docker.io/bitnami/postgresql:16.1.0-debian-11-r20
+  # thẳng trong template, KHÔNG đọc values.image.dbReadyImage/dbReadyTag (2
+  # field đó tồn tại trong values.yaml nhưng chart không dùng tới). Tag đó đã
+  # bị Bitnami gỡ khỏi Docker Hub (confirm bằng `docker pull` thật) — không
+  # sửa được qua values.yaml. Đã kubectl patch sang docker.io/postgres:16-alpine
+  # (có sẵn psql, không bị Bitnami xoá tag) — ignore field này để selfHeal
+  # không ghi đè lại image gốc đã hỏng mỗi lần reconcile.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: litellm
+      jsonPointers:
+        - /spec/template/spec/initContainers/0/image
