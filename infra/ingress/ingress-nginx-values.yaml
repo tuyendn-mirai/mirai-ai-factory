@@ -1,0 +1,23 @@
+# Helm values for the ingress-nginx CONTROLLER itself (the shared entrypoint
+# every app's Ingress routes through). Install:
+#   helm install ingress-nginx ingress-nginx/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace \
+#     -f infra/ingress/ingress-nginx-values.yaml --wait
+# Per-app Ingress objects (e.g. argocd-ingress.yaml) are separate resources
+# that reference this controller via ingressClassName: nginx.
+controller:
+  kind: DaemonSet
+  hostPort:
+    enabled: true
+  service:
+    # No cloud LB / servicelb in this cluster (mimics EKS: LB is provisioned
+    # externally, e.g. via AWS Load Balancer Controller). Traffic reaches the
+    # controller through hostPort, routed by k3d's serverlb -> worker nodes.
+    type: ClusterIP
+  publishService:
+    enabled: false
+  nodeSelector:
+    eks.amazonaws.com/nodegroup: default
+  tolerations: []
+  admissionWebhooks:
+    enabled: true

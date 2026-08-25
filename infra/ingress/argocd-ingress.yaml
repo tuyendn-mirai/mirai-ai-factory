@@ -1,0 +1,26 @@
+# Per-APP Ingress: routes argocd.mirai.local to the ArgoCD server through the
+# shared ingress-nginx controller (see ingress-nginx-values.yaml). One file
+# like this per app that needs an external route — apply with `kubectl apply`.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    # argocd-server terminates TLS itself (self-signed by default); let nginx
+    # re-encrypt to it rather than forcing --insecure on the server.
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: argocd.mirai.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  name: https

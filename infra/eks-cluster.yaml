@@ -1,0 +1,62 @@
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: mirai-eks
+
+servers: 1
+agents: 3
+
+image: rancher/k3s:v1.31.4-k3s1
+
+kubeAPI:
+  hostIP: "0.0.0.0"
+  hostPort: "6443"
+
+ports:
+  # Route only to worker (agent) nodes: the server node is tainted NoSchedule,
+  # so the ingress controller never lands there — routing to it too would
+  # give the loadbalancer a dead backend in its round-robin.
+  - port: 80:80
+    nodeFilters:
+      - agents:*:proxy
+  - port: 443:443
+    nodeFilters:
+      - agents:*:proxy
+
+options:
+  k3d:
+    wait: true
+    timeout: "180s"
+    disableLoadbalancer: false
+  k3s:
+    extraArgs:
+      # EKS has no bundled ingress controller (users install ALB/nginx controller) or L4 LB;
+      # disabling traefik/servicelb keeps the local cluster closer to that model.
+      - arg: "--disable=traefik"
+        nodeFilters:
+          - server:*
+      - arg: "--disable=servicelb"
+        nodeFilters:
+          - server:*
+      # EKS's managed control plane isn't schedulable; taint the server node to match.
+      - arg: "--node-taint=node-role.kubernetes.io/control-plane:NoSchedule"
+        nodeFilters:
+          - server:*
+      - arg: "--node-label=eks.amazonaws.com/nodegroup=system"
+        nodeFilters:
+          - server:*
+      - arg: "--node-label=eks.amazonaws.com/nodegroup=default"
+        nodeFilters:
+          - agent:*
+      - arg: "--node-label=topology.kubernetes.io/zone=ap-northeast-1a"
+        nodeFilters:
+          - agent:0
+      - arg: "--node-label=topology.kubernetes.io/zone=ap-northeast-1c"
+        nodeFilters:
+          - agent:1
+      - arg: "--node-label=topology.kubernetes.io/zone=ap-northeast-1d"
+        nodeFilters:
+          - agent:2
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true
