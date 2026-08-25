@@ -237,7 +237,15 @@ rbac:
   aggregateToAdmin: true
 
 ## -- Extra environment variables to add to container.
-extraEnv: []
+# AWS_SECRETSMANAGER_ENDPOINT: controller-level override cho MỌI
+# ClusterSecretStore/SecretStore dùng provider aws.service=SecretsManager
+# trong cluster (CRD không có field endpoint per-store — xem
+# clustersecretstore-localstack.yaml). host.k3d.internal là hostname k3d tự
+# tạo trỏ về gateway của host, dùng để pod trong cluster gọi ra LocalStack
+# chạy ngoài (docker-compose) — xem docs/INFRA_K3D_EKS.md mục LocalStack.
+extraEnv:
+  - name: AWS_SECRETSMANAGER_ENDPOINT
+    value: "http://host.k3d.internal:4566"
 
 ## -- Map of extra arguments to pass to container.
 extraArgs: {}

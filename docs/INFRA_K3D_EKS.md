@@ -285,6 +285,38 @@ AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-northeas
   --name smoke-test/hello --secret-string '{"ping":"pong"}'
 ```
 
+### UI xem resource trong LocalStack
+
+LocalStack Community không kèm UI local nào (chỉ có edge port `4566` là API
+endpoint). Web UI thật của LocalStack (`app.localstack.cloud`) là dịch vụ
+cloud, cần đăng nhập tài khoản + `LOCALSTACK_AUTH_TOKEN` để attach vào
+instance local — đi ngược lý do đã pin image xuống `4.13.1` ở trên (tránh
+đòi token). Thay vào đó dùng
+[`davireis/stackport`](https://github.com/DaviReisVieira/stackport) (MIT,
+đang maintain tích cực), thêm làm service `stackport` trong
+[`localstack/docker-compose.yml`](../localstack/docker-compose.yml), trỏ
+vào `localstack` qua network nội bộ của compose (`http://localstack:4566`).
+
+**Lưu ý:** biến region đúng tên là `AWS_REGION`, không phải
+`AWS_DEFAULT_REGION` (khác với AWS CLI) — set sai thì stackport mặc định
+`us-east-1`, list secret ra rỗng dù secret có thật trong LocalStack ở vùng
+khác.
+
+```bash
+cd localstack && docker compose up -d
+```
+
+Verify:
+
+```bash
+curl -s http://localhost:8090/api/health
+# {"status":"ok", ..., "endpoint_url":"http://localstack:4566", "region":"ap-northeast-1", ...}
+curl -s http://localhost:8090/api/secretsmanager/secrets   # list secret hiện có
+```
+
+Truy cập UI: `http://localhost:8090` (port `8080` mặc định của image đã bị
+container khác trên máy này chiếm, nên map ra `8090` ở host).
+
 ### Cho pod trong `mirai-eks` gọi ra LocalStack
 
 Kỳ vọng ban đầu: k3d tự inject `host.k3d.internal` vào CoreDNS lúc tạo

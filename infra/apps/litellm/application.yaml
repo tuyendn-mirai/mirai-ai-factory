@@ -1,0 +1,37 @@
+# ArgoCD Application for LiteLLM (Tầng 3), following the infra/apps/<name>/
+# convention: values.yaml is a real file in this repo (cloned from the
+# chart's defaults), referenced here via a second "values" source.
+#
+# Chart mặc định là OCI (oci://ghcr.io/berriai/litellm-helm) — ArgoCD khai
+# báo OCI Helm chart bằng repoURL KHÔNG có tiền tố "oci://", còn "chart" là
+# path/tên chart trong registry đó.
+#
+# Chưa Healthy ngay sau khi apply: Deployment cần 2 Secret chưa tồn tại
+# (litellm-db-credentials, litellm-env-secrets) — sẽ do ExternalSecret tạo
+# (mục 8, docs/INFRA_K3D_EKS.md, chưa làm).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: ghcr.io/berriai
+      chart: litellm-helm
+      targetRevision: "0.1.100"
+      helm:
+        valueFiles:
+          - $values/infra/apps/litellm/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: litellm
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
