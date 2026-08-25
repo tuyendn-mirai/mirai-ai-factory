@@ -202,8 +202,155 @@ Running; Ingress `argocd-server` hoạt động qua `ingress-nginx`
 trong cluster; đã đổi mật khẩu admin khỏi giá trị khởi tạo mặc định. Chưa
 tạo Application nào.
 
-## 6. Việc tiếp theo (chưa làm)
+## 6. Quy ước `infra/apps/<name>/` cho mọi app cài bằng Helm/ArgoCD
 
-- [ ] Tạo Application đầu tiên trỏ vào một repo Git để test GitOps sync
-- [ ] Cân nhắc quản lý các manifest app trong `infra/ingress/*.yaml` bằng
-      chính ArgoCD (app-of-apps) thay vì `kubectl apply` thủ công
+Từ đây trở đi, **không `helm install` tay** — mỗi app cài qua Helm/ArgoCD có
+một thư mục riêng:
+
+```
+infra/apps/<name>/
+├── values.yaml       # clone từ `helm show values <repo>/<chart> --version X`,
+│                     # rồi chỉnh trực tiếp trong file này
+└── application.yaml  # ArgoCD Application, multi-source: 1 nguồn là chart
+                       # (repoURL = chart repo/OCI), 1 nguồn là chính repo
+                       # git này (ref: values) để trỏ tới values.yaml ở trên
+```
+
+Ví dụ đã làm — [`infra/apps/external-secrets/`](../infra/apps/external-secrets/):
+
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm show values external-secrets/external-secrets --version 2.9.0 \
+  > infra/apps/external-secrets/values.yaml
+# viết infra/apps/external-secrets/application.yaml (xem file mẫu)
+kubectl apply -f infra/apps/external-secrets/application.yaml
+```
+
+`application.yaml` cần `syncOptions: [ServerSideApply=true]` — CRD của
+external-secrets (`secretstores.external-secrets.io`,
+`clustersecretstores.external-secrets.io`) đủ lớn để lỗi
+`last-applied-configuration` vượt 262144 bytes giống hệt lỗi gặp ở bước cài
+ArgoCD (mục 5), nên phải server-side apply ngay từ đầu thay vì để tự retry.
+
+**Điều kiện để multi-source hoạt động:** ArgoCD phải pull được chính repo
+này từ git, nghĩa là:
+
+1. Code phải **push lên `origin`** (`git@github.com:tuyendn-mirai/mirai-ai-factory.git`).
+2. ArgoCD phải có credentials đọc repo (repo này private). Đã đăng ký bằng
+   SSH key sẵn có `~/.ssh/id_ed25519_mirai`, dùng **hostname GitHub thật**
+   (`github.com`), KHÔNG dùng alias `github.com-mirai` trong `~/.ssh/config`
+   của máy — repo-server của ArgoCD không biết alias đó:
+   ```bash
+   kubectl create secret generic repo-mirai-ai-factory -n argocd \
+     --from-literal=type=git \
+     --from-literal=url=git@github.com:tuyendn-mirai/mirai-ai-factory.git \
+     --from-file=sshPrivateKey="$HOME/.ssh/id_ed25519_mirai" \
+     --dry-run=client -o yaml \
+     | kubectl label --local -f - --dry-run=client -o yaml \
+       argocd.argoproj.io/secret-type=repository \
+     | kubectl apply -f -
+   ```
+   Verify: `argocd repo list --grpc-web` → `STATUS: Successful`.
+
+Trạng thái hiện tại: `external-secrets` (Operator) đã deploy qua ArgoCD vào
+namespace `external-secrets`, `Sync: Synced`, `Health: Healthy`.
+
+## 7. LocalStack (mock AWS Secrets Manager) — chạy ngoài cluster
+
+Thư mục: [`localstack/`](../localstack/) — **cố tình để ngoài `mirai-eks`**,
+không phải app trong cluster. Lý do: trên EKS thật, Secrets Manager là
+managed service nằm ngoài cluster, pod gọi ra ngoài qua endpoint AWS — dựng
+LocalStack trong cluster sẽ làm sai mô hình đang mô phỏng. Cùng pattern với
+Postgres/Redis/Ollama trong `docker-compose.yml` gốc (đều là "server ngoài").
+
+```bash
+cd localstack
+docker compose up -d
+```
+
+**Lưu ý về image tag:** `localstack/localstack:latest` (và các tag
+`2026.*`) từ 2026 yêu cầu `LOCALSTACK_AUTH_TOKEN` (tài khoản free) ngay cả
+cho service community như Secrets Manager — báo lỗi "License activation
+failed" và thoát ngay khi start. Đã pin về `4.13.1` (tag semver trước khi
+đổi chính sách), chạy hoàn toàn không cần token, `edition: community`.
+
+Verify:
+
+```bash
+curl -s http://localhost:4566/_localstack/health   # secretsmanager: "available"
+
+# smoke test thật (test/test là access key giả LocalStack chấp nhận bất kỳ giá trị nào)
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=ap-northeast-1 \
+  aws --endpoint-url=http://localhost:4566 secretsmanager create-secret \
+  --name smoke-test/hello --secret-string '{"ping":"pong"}'
+```
+
+### Cho pod trong `mirai-eks` gọi ra LocalStack
+
+Kỳ vọng ban đầu: k3d tự inject `host.k3d.internal` vào CoreDNS lúc tạo
+cluster (thấy trong log `k3d cluster create`: "Injecting records for
+hostAliases (incl. host.k3d.internal)..."). **Thực tế trên cluster này
+entry đó không tồn tại** — có thể do k3s's addon reconciler
+(`objectset.rio.cattle.io` owner trên configmap `coredns`) ghi đè lại
+ConfigMap sau khi k3d inject, hoặc bị mất sau lần cluster bị recreate.
+Kiểm tra bằng:
+
+```bash
+kubectl get configmap coredns -n kube-system -o jsonpath='{.data.NodeHosts}'
+# chỉ thấy tên node (k3d-mirai-eks-agent-0...), KHÔNG có host.k3d.internal
+```
+
+Fix: patch thêm dòng vào `NodeHosts` trỏ về gateway IP của docker network
+`k3d-mirai-eks` (không hard-code IP vào app config — chỉ patch một lần ở
+tầng CoreDNS, app luôn dùng hostname `host.k3d.internal`):
+
+```bash
+GATEWAY_IP=$(docker network inspect k3d-mirai-eks \
+  --format '{{(index .IPAM.Config 0).Gateway}}')
+
+kubectl get configmap coredns -n kube-system -o jsonpath='{.data.NodeHosts}' \
+  > /tmp/nodehosts.txt
+echo "$GATEWAY_IP host.k3d.internal" >> /tmp/nodehosts.txt
+
+kubectl create configmap coredns -n kube-system \
+  --from-literal=Corefile="$(kubectl get configmap coredns -n kube-system -o jsonpath='{.data.Corefile}')" \
+  --from-file=NodeHosts=/tmp/nodehosts.txt \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -f /tmp/nodehosts.txt
+
+# ConfigMap volume không refresh ngay trong pod đang chạy — restart để áp dụng liền
+kubectl rollout restart deployment coredns -n kube-system
+kubectl rollout status deployment coredns -n kube-system
+```
+
+Verify từ trong cluster:
+
+```bash
+kubectl run curl-test --image=curlimages/curl:latest --restart=Never --rm -i --command -- \
+  curl -s -o /dev/null -w "HTTP %{http_code}\n" http://host.k3d.internal:4566/_localstack/health
+# HTTP 200
+```
+
+**Quan trọng:** patch CoreDNS này **không nằm trong `infra/eks-cluster.yaml`**
+— phải chạy lại thủ công mỗi khi cluster `mirai-eks` bị `k3d cluster
+delete` + `create` lại (gateway IP của docker network có thể đổi giữa các
+lần tạo).
+
+Trạng thái hiện tại: LocalStack chạy ngoài cluster, `secretsmanager`
+available, pod trong `mirai-eks` gọi được qua `http://host.k3d.internal:4566`.
+Chưa nối `external-secrets` (mục 6) vào LocalStack này qua `SecretStore`.
+
+## 8. Việc tiếp theo (chưa làm)
+
+- [ ] Tạo `SecretStore`/`ClusterSecretStore` trỏ external-secrets vào
+      `http://host.k3d.internal:4566` (provider `aws`, service
+      `SecretsManager`, access key giả `test`/`test`)
+- [ ] Seed secret thật vào LocalStack (thay cho giá trị đang nằm trong
+      `.env` đã bị commit — xem cảnh báo bảo mật đang treo, chưa xử lý)
+- [ ] Viết `ExternalSecret` cho LiteLLM (`LITELLM_MASTER_KEY`,
+      `DATABASE_URL`, `REDIS_PASSWORD`...) theo convention
+      `infra/apps/<name>/`
+- [ ] Deploy LiteLLM lên `mirai-eks` qua ArgoCD (Helm `litellm-helm`),
+      dùng Secret do `external-secrets` sync ra thay vì giá trị plaintext
+- [ ] Cân nhắc quản lý các manifest ở `infra/ingress/*.yaml` bằng chính
+      ArgoCD (app-of-apps) thay vì `kubectl apply` thủ công

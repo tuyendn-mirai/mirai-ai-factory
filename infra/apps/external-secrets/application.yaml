@@ -1,0 +1,35 @@
+# ArgoCD Application for external-secrets, following the infra/apps/<name>/
+# convention: values.yaml is a real file in this repo (cloned from the
+# chart's defaults), referenced here via a second "values" source instead of
+# being embedded inline or installed with a one-off `helm install`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: "2.9.0"
+      helm:
+        valueFiles:
+          - $values/infra/apps/external-secrets/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The secretstores.external-secrets.io / clustersecretstores.external-secrets.io
+      # CRDs are large enough that client-side apply's last-applied-configuration
+      # annotation exceeds the 262144-byte limit (same issue hit installing
+      # ArgoCD's own CRDs — see docs/INFRA_K3D_EKS.md). Server-side apply avoids it.
+      - ServerSideApply=true

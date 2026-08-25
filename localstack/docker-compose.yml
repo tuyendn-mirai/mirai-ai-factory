@@ -1,0 +1,26 @@
+services:
+  # Mock AWS Secrets Manager cho local dev — chạy NGOÀI cluster mirai-eks,
+  # giống cách Postgres/Redis/Ollama khác đều là "server ngoài" trong
+  # docker-compose.yml ở gốc repo. Lý do dựng ngoài thay vì trong k8s: trên
+  # EKS thật, Secrets Manager là managed service nằm ngoài cluster — pod gọi
+  # ra ngoài qua endpoint AWS chứ Secrets Manager không chạy như workload
+  # trong cluster. Xem docs/INFRA_K3D_EKS.md mục LocalStack.
+  #
+  # Pod trong mirai-eks gọi vào đây qua http://host.k3d.internal:4566
+  # (hostname này k3d tự tạo sẵn khi tạo cluster, trỏ về gateway của host).
+  localstack:
+    # Pinned to a pre-2026-calendar-versioning tag: newer `latest`/`2026.*`
+    # builds require a LOCALSTACK_AUTH_TOKEN (free account) even for
+    # community services like Secrets Manager — this tag still runs fully
+    # unauthenticated.
+    image: localstack/localstack:4.13.1
+    container_name: mirai-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=secretsmanager
+      - DEBUG=${DEBUG:-0}
+      - PERSISTENCE=1
+    volumes:
+      - "./volume:/var/lib/localstack"
+    restart: unless-stopped
