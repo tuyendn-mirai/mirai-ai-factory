@@ -20,7 +20,7 @@ model_list:
   # theo tên nghiệp vụ, không quan tâm/không biết model thật đứng sau.
   # Sau này đổi model vật lý (hoặc trỏ 2 tên qua 2 model khác nhau) chỉ
   # sửa ở đây, Tầng 4 không cần biết.
-  - model_name: fp-analysis-default
+  - model_name: gemma4:e4b
     litellm_params:
       model: ollama/gemma4:e4b
       api_base: os.environ/OLLAMA_BASE_URL
@@ -29,9 +29,9 @@ model_list:
       hinh_thuc_trien_khai: on-premise
       status: active
 
-  - model_name: cr-summarizer-fast
+  - model_name: gemma4:31b
     litellm_params:
-      model: ollama/gemma4:e4b
+      model: ollama/gemma4:31b
       api_base: os.environ/OLLAMA_BASE_URL
     model_info:
       nguon_cung: ollama-local
@@ -84,3 +84,9 @@ litellm_settings:
     password: os.environ/REDIS_PASSWORD
     db: os.environ/REDIS_DB
     namespace: "litellm.cache"
+
+  # Gửi trace mọi request/response (kể cả lỗi) sang Langfuse — cùng project
+  # với Langflow (LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST, xem docker-compose.yml)
+  # nên trace của Tầng 3 và Tầng 4 nằm chung 1 chỗ, đối chiếu được với nhau.
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]

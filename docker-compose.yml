@@ -26,12 +26,22 @@ services:
       - REDIS_PORT=${REDIS_PORT:?set REDIS_PORT in .env}
       - REDIS_PASSWORD=${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
       - REDIS_DB=${LITELLM_REDIS_DB:-1}
+      # Gửi trace request/response sang Langfuse (self-host, service
+      # langfuse-web bên dưới) — dùng chung project/key với Langflow nên
+      # trace của Tầng 3 và Tầng 4 nằm chung 1 chỗ để đối chiếu.
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_HOST=http://langfuse-web:3000
       # Chỉ cần điền nếu bật thêm entry vendor thật trong config.yaml.
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - AWS_REGION_NAME=${AWS_REGION_NAME:-us-east-1}
+      - STORE_MODEL_IN_DB=true
+      - LITELLM_DROP_PARAMS=true
+    depends_on:
+      - langfuse-web
     restart: unless-stopped
 
   # ── Tầng 4 — Agent & Workflow Factory ──
@@ -47,7 +57,10 @@ services:
     ports:
       - "7860:7860"
     environment:
-      - LANGFLOW_AUTO_LOGIN=true
+      # Tắt auto-login, bắt buộc đăng nhập bằng user/password riêng.
+      - LANGFLOW_AUTO_LOGIN=false
+      - LANGFLOW_SUPERUSER=${LANGFLOW_SUPERUSER:?set LANGFLOW_SUPERUSER in .env}
+      - LANGFLOW_SUPERUSER_PASSWORD=${LANGFLOW_SUPERUSER_PASSWORD:?set LANGFLOW_SUPERUSER_PASSWORD in .env}
       - MIRAI_HUB_BASE_URL=http://litellm:4000
       # SSRF protection của Langflow chặn mọi hostname nội bộ theo mặc định
       # — phải allowlist "litellm" và "langfuse-web" thì Agent/OpenAI

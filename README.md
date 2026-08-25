@@ -91,6 +91,7 @@ image chính thức:
 ```bash
 cp .env.example .env
 # Điền các biến bắt buộc trong .env:
+#   LANGFLOW_SUPERUSER / LANGFLOW_SUPERUSER_PASSWORD  (đăng nhập UI Langflow)
 #   OLLAMA_BASE_URL, DATABASE_URL                     (LiteLLM)
 #   LANGFLOW_DATABASE_URL                             (Langflow)
 #   LANGFUSE_DATABASE_URL                              (Langfuse)
@@ -99,8 +100,8 @@ cp .env.example .env
 #   CLICKHOUSE_MIGRATION_URL / CLICKHOUSE_URL / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
 #   MINIO_ENDPOINT / MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / LANGFUSE_S3_BUCKET
 #   REDIS_HOST / REDIS_PORT / REDIS_PASSWORD (LiteLLM) + REDIS_CONNECTION_STRING (Langfuse)
-#   LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY / LANGFUSE_INIT_USER_EMAIL / LANGFUSE_INIT_USER_PASSWORD
 # (OPENAI_API_KEY/ANTHROPIC_API_KEY/AWS_* để trống — không cần cho POC này)
+# (LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY để trống lúc đầu — điền sau, xem bên dưới)
 
 docker compose up -d
 docker compose ps        # đợi tất cả service running
@@ -108,13 +109,16 @@ docker compose ps        # đợi tất cả service running
 
 - LiteLLM (Tầng 3): http://localhost:4000
 - LiteLLM Admin UI (xem model, spend log qua UI): http://localhost:4000/ui
-- Langflow (Tầng 4): http://localhost:7860
-- Langfuse (observability): http://localhost:3000 — **không cần đăng ký
-  tay**. Org/Project/user/API-key được tự khởi tạo ngay từ `.env`
-  (`LANGFUSE_INIT_*`) ở lần chạy đầu; `LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`
-  trong `.env` chính là key Langflow đã dùng sẵn để gửi trace. Muốn tự vào
-  UI xem trace thì đăng nhập bằng `LANGFUSE_INIT_USER_EMAIL` /
-  `LANGFUSE_INIT_USER_PASSWORD`.
+- Langflow (Tầng 4): http://localhost:7860 — đăng nhập bằng
+  `LANGFLOW_SUPERUSER` / `LANGFLOW_SUPERUSER_PASSWORD` trong `.env` (đã tắt
+  auto-login, bắt buộc có tài khoản).
+- Langfuse (observability): http://localhost:3000 — lần đầu vào phải tự
+  đăng ký (sign up) 1 user, tạo Organization + Project. Sau đó vào
+  **Settings → API Keys → Create new**, copy Public Key + Secret Key vào
+  `.env` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`), rồi:
+  ```bash
+  docker compose up -d langflow   # áp dụng key mới cho Langflow
+  ```
 
 ## 3. Kiểm tra Tầng 3 độc lập (chưa cần Langflow)
 
