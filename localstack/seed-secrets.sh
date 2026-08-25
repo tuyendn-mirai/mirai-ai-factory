@@ -40,19 +40,19 @@ seed_secret "mirai/litellm" "Credentials cho LiteLLM (layer3)" '{
   "REDIS_HOST": "host.k3d.internal",
   "REDIS_PORT": "6380",
   "REDIS_PASSWORD": "Adgjmptw1",
-  "REDIS_DB": "1"
+  "REDIS_DB": "1",
+  "LANGFUSE_HOST": "http://langfuse-web.langfuse.svc.cluster.local:3000",
+  "LANGFUSE_PUBLIC_KEY": "pk-lf-3a992d47-aa05-4508-9168-5b3fa9eadd6c",
+  "LANGFUSE_SECRET_KEY": "sk-lf-fda8e66d-61e3-452a-957f-ab27030b64eb"
 }'
 
-# Langfuse/Langflow: CHƯA deploy vào mirai-eks (chưa có chart/values.yaml
-# thật để biết đúng tên field ExternalSecret cần trích) — field ở đây là
-# best-guess theo tên biến trong .env gốc repo, giữ nguyên bài học từ
-# LiteLLM: nhiều khả năng phải reshape lại (đổi tên key, tách/gộp field)
-# một khi thật sự viết infra/apps/langfuse/ và infra/apps/langflow/. Chỉ
-# chứa credential thật cần cho CHÍNH app đó khởi động — không chứa
-# LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY (key phía consumer, tạo sau khi
-# có UI Langfuse chạy, không phải lúc deploy Langfuse) hay host/port (config
-# thường, không phải secret — sẽ vào values.yaml khi viết app thật, giống
-# db.endpoint của litellm).
+# Langfuse: đã deploy (infra/apps/langfuse/), field bên dưới khớp đúng
+# ExternalSecret ở đó (xem infra/apps/langfuse/external-secret.yaml).
+#
+# Langflow: CHƯA deploy vào mirai-eks (chưa có chart/values.yaml thật để
+# biết đúng tên field ExternalSecret cần trích) — field ở đây là best-guess
+# theo tên biến trong .env gốc repo, nhiều khả năng phải reshape lại khi
+# thật sự viết infra/apps/langflow/, giống bài học ở LiteLLM/Langfuse.
 seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
   "DB_USERNAME": "mirai",
   "DB_PASSWORD": "Adgjmptw1",

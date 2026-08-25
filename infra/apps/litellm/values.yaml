@@ -136,13 +136,16 @@ proxy_config:
       db: os.environ/REDIS_DB
       namespace: "litellm.cache"
 
-    # Chưa bật: Langfuse hiện chỉ chạy qua docker-compose ở gốc repo, chưa
-    # deploy vào mirai-eks. Muốn bật lại cần: (1) deploy Langfuse vào cluster
-    # hoặc trỏ LANGFUSE_HOST=http://host.k3d.internal:<port> giống pattern
-    # LocalStack (xem ../../../localstack/README.md), (2) thêm LANGFUSE_PUBLIC_KEY/
-    # LANGFUSE_SECRET_KEY/LANGFUSE_HOST vào litellm-env-secrets.
-    # success_callback: ["langfuse"]
-    # failure_callback: ["langfuse"]
+    # Langfuse đã deploy vào mirai-eks (../langfuse/) — LANGFUSE_PUBLIC_KEY/
+    # LANGFUSE_SECRET_KEY/LANGFUSE_HOST bơm qua environmentSecrets (biến
+    # LANGFUSE_HOST trỏ service nội bộ cluster
+    # http://langfuse-web.langfuse.svc.cluster.local:3000, không cần
+    # host.k3d.internal vì Langfuse giờ chạy TRONG cluster, không phải
+    # container ngoài như Postgres/Redis). litellm/langfuse SDK tự đọc 3
+    # biến môi trường này khi success_callback/failure_callback bật —
+    # không cần field riêng nào trong config.yaml.
+    success_callback: ["langfuse"]
+    failure_callback: ["langfuse"]
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
