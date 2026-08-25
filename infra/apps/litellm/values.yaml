@@ -106,7 +106,7 @@ proxy_config:
     - model_name: gemma4:e4b
       litellm_params:
         model: ollama/gemma4:e4b
-        api_base: "http://172.16.0.191:11434"
+        api_base: "http://host.k3d.internal:11434"
       model_info:
         nguon_cung: ollama-local
         hinh_thuc_trien_khai: on-premise
@@ -115,7 +115,7 @@ proxy_config:
     - model_name: gemma4:31b
       litellm_params:
         model: ollama/gemma4:31b
-        api_base: "http://172.16.0.191:11434"
+        api_base: "http://host.k3d.internal:11434"
       model_info:
         nguon_cung: ollama-local
         hinh_thuc_trien_khai: on-premise
@@ -182,16 +182,24 @@ tolerations: []
 affinity: {}
 
 db:
-  # Postgres đã dựng sẵn ở server khác (172.16.0.191) — không dùng subchart
-  # postgresql (Chart.yaml gate subchart này bằng "condition:
-  # db.deployStandalone", nên tắt deployStandalone cũng tắt luôn subchart).
+  # Postgres chạy sẵn qua docker-compose ở gốc repo (trên máy host cụm k3d
+  # này) — không dùng subchart postgresql (Chart.yaml gate subchart này bằng
+  # "condition: db.deployStandalone", nên tắt deployStandalone cũng tắt
+  # luôn subchart).
   useExisting: true
 
   # ai_factory là DB dùng chung nhiều app, mỗi app 1 schema riêng (xem .env
   # gốc repo) — "?schema=litellm" là cú pháp Prisma connection string bình
   # thường, ghép thẳng vào đây vì DATABASE_URL của chart chỉ nối chuỗi
   # "postgresql://user:pass@endpoint/database" (xem templates/deployment.yaml).
-  endpoint: "172.16.0.191:5435"
+  #
+  # host.k3d.internal thay vì IP LAN tĩnh (172.16.0.191, DHCP trên
+  # enp5s0 — có thể đổi): Postgres này thực chất là container docker-compose
+  # CHẠY NGAY TRÊN máy đang host cụm k3d này (không phải server khác), nên
+  # dùng đúng hostname k3d tự tạo trỏ về gateway của host — cùng pattern
+  # LocalStack ở mục 7, docs/INFRA_K3D_EKS.md. Đã verify bằng `psql` thật từ
+  # 1 pod trong cluster trước khi đổi.
+  endpoint: "host.k3d.internal:5435"
   database: "ai_factory?schema=litellm"
   secret:
     # litellm-db-credentials: chưa tồn tại — sẽ do một ExternalSecret tạo ra
