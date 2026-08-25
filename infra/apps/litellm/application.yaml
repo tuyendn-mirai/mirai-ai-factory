@@ -35,6 +35,13 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      # Mặc định ignoreDifferences chỉ ảnh hưởng tính Sync Status, KHÔNG áp
+      # dụng lúc sync thật (đã tự kiểm chứng: sync do thay đổi khác — sửa
+      # masterkey — đã ghi đè lại field bị ignore, phải patch tay lại lần
+      # nữa). RespectIgnoreDifferences=true bắt ArgoCD splice giá trị LIVE
+      # vào manifest desired TRƯỚC khi áp dụng, giữ được field bị ignore qua
+      # mọi lần sync — không chỉ lúc đầu tạo resource.
+      - RespectIgnoreDifferences=true
   # Bug của chart litellm-helm (mọi version tính đến 0.1.100): initContainer
   # "db-ready" hard-code image docker.io/bitnami/postgresql:16.1.0-debian-11-r20
   # thẳng trong template, KHÔNG đọc values.image.dbReadyImage/dbReadyTag (2
