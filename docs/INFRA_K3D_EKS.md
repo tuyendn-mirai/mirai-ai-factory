@@ -372,6 +372,33 @@ Trạng thái hiện tại: LocalStack chạy ngoài cluster, `secretsmanager`
 available, pod trong `mirai-eks` gọi được qua `http://host.k3d.internal:4566`.
 Chưa nối `external-secrets` (mục 6) vào LocalStack này qua `SecretStore`.
 
+### Persistence KHÔNG hoạt động ở bản Community
+
+`PERSISTENCE=1` + mount volume (`./volume:/var/lib/localstack`) tưởng là đủ
+nhưng **không** — persistence là tính năng trả phí, cần
+`LOCALSTACK_AUTH_TOKEN` (gói Base/Ultimate) mới thật sự ghi state ra đĩa, kể
+cả trên tag `4.13.1` đã pin để né token cho service community (confirm qua
+docs chính thức của LocalStack — không phải đoán; `volume/state/` rỗng dù
+đã tạo secret từ trước). Container `localstack` restart (kể cả do máy/docker
+daemon restart ngoài ý muốn, đã gặp 2 lần trong lúc dựng LiteLLM — mục 9) là
+mất sạch secret.
+
+Script [`localstack/seed-secrets.sh`](../localstack/seed-secrets.sh) tạo lại
+(idempotent — create nếu chưa có, update nếu đã có) toàn bộ secret biết
+trước. Chạy sau MỖI lần `docker compose up` container localstack:
+
+```bash
+./localstack/seed-secrets.sh
+```
+
+Nếu ExternalSecret trong cluster đã sync trước lúc mất secret (Secret k8s
+vẫn còn cache giá trị cũ), force sync lại:
+
+```bash
+kubectl annotate externalsecret litellm-db-credentials litellm-env-secrets -n litellm \
+  force-sync=$(date +%s) --overwrite
+```
+
 ## 8. ClusterSecretStore trỏ external-secrets vào LocalStack
 
 Manifest: [`infra/apps/external-secrets/clustersecretstore-localstack.yaml`](../infra/apps/external-secrets/clustersecretstore-localstack.yaml)
