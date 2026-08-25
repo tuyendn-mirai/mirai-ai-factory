@@ -45,7 +45,8 @@ infra/
 │                    # (ArgoCD không phải Helm chart nên không có infra/apps/argocd/)
 └── apps/            # Mỗi app cài qua Helm/ArgoCD — xem infra/apps/README.md
     ├── external-secrets/
-    └── litellm/
+    ├── litellm/
+    └── langfuse/
 ```
 
 Xem README trong từng thư mục con để biết chi tiết cách dựng.
@@ -58,13 +59,19 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
       là best-guess theo `.env` (chưa có chart/values.yaml thật để biết tên
       field chính xác ExternalSecret cần trích — nhiều khả năng phải reshape
       lại khi thật sự viết `infra/apps/langfuse/`, giống bài học ở LiteLLM).
-- [ ] Deploy Langfuse vào `mirai-eks` (hoặc trỏ `LANGFUSE_HOST=
-      http://host.k3d.internal:<port>` giống pattern LocalStack) rồi bật lại
-      `success_callback`/`failure_callback` trong `proxy_config` của LiteLLM
+- [x] Deploy Langfuse vào `mirai-eks` qua ArgoCD — xem
+      [`apps/langfuse/README.md`](apps/langfuse/README.md). Postgres/Redis/
+      ClickHouse/MinIO nối qua `host.k3d.internal`, đọc credential (kể cả
+      salt/encryption-key/nextauth-secret) qua ExternalSecret — không
+      plaintext như `masterkey` của LiteLLM.
+- [ ] Trỏ `LANGFUSE_HOST=http://langfuse-web.langfuse.svc.cluster.local:3000`
+      rồi bật lại `success_callback`/`failure_callback` trong `proxy_config`
+      của LiteLLM (`infra/apps/litellm/values.yaml`)
 - [ ] Deploy Langflow (Tầng 4) qua ArgoCD, trỏ vào `http://litellm.litellm.svc.cluster.local:4000`
 - [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công
       (`infra/argocd/argocd-ingress.yaml`,
       `infra/apps/external-secrets/clustersecretstore.yaml`,
-      `infra/apps/litellm/external-secret.yaml`) bằng chính ArgoCD
+      `infra/apps/litellm/external-secret.yaml`,
+      `infra/apps/langfuse/external-secret.yaml`) bằng chính ArgoCD
       (app-of-apps hoặc thêm làm source thứ 3 trong multi-source Application)
       thay vì `kubectl apply` thủ công

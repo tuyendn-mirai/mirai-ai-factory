@@ -1,0 +1,33 @@
+# ArgoCD Application for Langfuse (LLM observability), following the
+# infra/apps/<name>/ convention: values.yaml is a real file in this repo
+# (cloned from the chart's defaults), referenced here via a second "values"
+# source.
+#
+# Chưa Healthy ngay sau khi apply: Deployment cần Secret "langfuse-credentials"
+# chưa tồn tại — do external-secret.yaml (cùng thư mục này) tạo, xem README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langfuse
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://langfuse.github.io/langfuse-k8s
+      chart: langfuse
+      targetRevision: "2.0.2"
+      helm:
+        valueFiles:
+          - $values/infra/apps/langfuse/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: langfuse
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
