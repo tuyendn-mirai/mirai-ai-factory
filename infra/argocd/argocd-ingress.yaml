@@ -1,6 +1,9 @@
-# Per-APP Ingress: routes argocd.mirai.local to the ArgoCD server through the
-# shared ingress-nginx controller (see ingress-nginx-values.yaml). One file
-# like this per app that needs an external route — apply with `kubectl apply`.
+# Routes argocd.mirai.local to the ArgoCD server through the shared
+# ingress-nginx controller (see infra/ingress/ingress-nginx-values.yaml).
+# Apply with `kubectl apply`. ArgoCD itself has no Helm values (installed
+# from install.yaml in this same folder, not a chart) so this can't move
+# into a chart's own `ingress.enabled` the way infra/apps/<name>/ apps can
+# — see infra/apps/litellm/values.yaml for that pattern instead.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

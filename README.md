@@ -1,211 +1,77 @@
-# Mirai AI Factory — POC Tầng 3 & Tầng 4
+# README cho Agent — Dựng local mimic AI Factory Platform trên k3d
 
-Prototype cho ranh giới kiến trúc mô tả ở [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Tài liệu này để đưa cho một coding agent (Claude Code hoặc tương đương) làm việc trong repo này.
+Agent đọc file này trước, hiểu đúng bối cảnh và ràng buộc, rồi mới bắt tay thực thi
+`k3d-eks-mimic-runbook.md` — không tự suy diễn thêm ngoài phạm vi ở đây.
 
-Không viết Registry API riêng: **LiteLLM Proxy tự thân đóng vai trò Tầng 3**
-(Registry + API thống nhất). **Langflow** đóng vai trò Tầng 4 và chỉ được
-cấu hình trỏ vào LiteLLM — không có custom code/plugin nào gọi thẳng vendor.
+## Mục tiêu
 
-```
-Tầng 4  Langflow  ──POST /chat/completions (model=<logical_model>)──▶  Tầng 3  LiteLLM Proxy ──▶  Tầng 2  Ollama (server riêng, không key)
-    │                                                                        │
-    │ trace                                                                  ▼
-    ▼                                                              Postgres (server riêng, audit/spend log)
-Langfuse web+worker (self-host) ──▶ Postgres / ClickHouse / Redis / MinIO (đều server riêng)
-```
+Dựng một bản mimic local trên 1 máy Linux của AI Factory Platform (layer 3 AI Hub, layer 4 Agents,
+layer 5 Hub UI), dùng k3d thay AWS EKS, quản lý toàn bộ bằng GitOps qua Argo CD. Mục đích: lặp thử
+cấu hình Helm chart / manifest trước khi áp dụng lên EKS staging thật, không phải để chạy production.
 
-Toàn bộ hạ tầng nền (Ollama, Postgres, ClickHouse, Redis, MinIO) đều là
-**server ngoài đã dựng sẵn**, không chạy container nào trong compose này.
-`docker compose up` chỉ khởi 4 service **app**:
-- **LiteLLM** (Tầng 3) — DB trỏ ra Postgres ngoài.
-- **Langflow** (Tầng 4) — DB trỏ ra Postgres ngoài (không còn dùng SQLite
-  mặc định trong container).
-- **Langfuse web + worker** (self-host) — LLM observability cho Langflow;
-  metadata trỏ Postgres ngoài, trace/analytics trỏ ClickHouse ngoài, queue
-  trỏ Redis ngoài, blob sự kiện trỏ MinIO/S3 ngoài.
+## Bối cảnh đã có sẵn — KHÔNG dựng lại
 
-Không có volume cục bộ nào trong repo này nữa — mọi state đều nằm ở các
-server ngoài.
+- Một project docker-compose khác, **cùng máy**, đang chạy Postgres, Redis, ClickHouse, MinIO trên
+  Docker network `platform-net`. Agent không được sửa file docker-compose của project đó, chỉ được
+  **thêm** service `localstack` vào cùng file nếu chưa có.
+- IP tĩnh từng service lấy từ `docker network inspect platform-net` tại thời điểm thực thi — không
+  hardcode IP đã ghi trong runbook nếu thực tế khác, phải tự kiểm tra lại trước khi tạo Endpoints.
+- Repo GitOps cho Argo CD là repo Git riêng, tách khỏi 2 repo ứng dụng (Hub Web App, BFF).
 
-| Khái niệm trong docs/ARCHITECTURE.md | Triển khai thật bằng LiteLLM |
-|---|---|
-| Registry (metadata nguon_cung, hinh_thuc_trien_khai...) | `model_list[].model_info` trong [layer3-litellm/config.yaml](layer3-litellm/config.yaml) |
-| `logical_model` | `model_name` trong config, chính là field `"model"` khi gọi API |
-| `vendor_model_id` | `litellm_params.model` (Tầng 4 không bao giờ thấy giá trị này) |
-| `fallback_logical_model` | `router_settings.fallbacks` |
-| API thống nhất `POST /v1/invoke` | `POST /chat/completions` (OpenAI-compatible) của LiteLLM |
-| `GET /v1/models` | `GET /model/info` (đầy đủ nhãn) hoặc `GET /v1/models` (chỉ tên) |
-| Audit log mọi request | Postgres + `GET /spend/logs`, tự động khi có `DATABASE_URL` |
+## Quyết định đã chốt — KHÔNG đổi mà không hỏi lại
 
-## 1. Cài đặt / thư viện cần thiết
+| Vấn đề | Đã chọn | Không dùng |
+|---|---|---|
+| K8s distro local | k3d (multi-node trong Docker, join network `platform-net`) | k3s bare-metal, kind, minikube |
+| AWS service giả lập (Secrets Manager...) | LocalStack | Vault, SSM thật |
+| Bridge secret vào k8s | External Secrets Operator, trỏ LocalStack qua `AWS_ENDPOINT_URL_SECRETSMANAGER` | tự code sync secret |
+| Nối tới Postgres/Redis/ClickHouse/MinIO | Service + Endpoints thủ công trỏ IP tĩnh trong `platform-net` | deploy lại các service này trong cluster |
+| LoadBalancer Service | MetalLB (nếu cần IP riêng từng Service) | mặc định k3d serverlb nếu cần test đa IP |
+| Cài OSS (LiteLLM, Langflow, Langfuse, Keycloak...) | Helm chart chính thức của từng project | tự viết manifest tay |
+| Quản lý deploy | Argo CD, app-of-apps, tự động sync từ Git | `helm install` tay ngoài GitOps sau bước bootstrap |
+| S3-compatible | MinIO (đã có) | KHÔNG bật thêm `s3` trong LocalStack — tránh hai nguồn S3 |
 
-Chỉ cần **Docker Desktop** (hoặc Docker Engine + Compose plugin) — không cần
-cài Python/Node cục bộ, mọi thứ chạy trong container:
+## Việc cần làm
 
-- Docker >= 24.x, Docker Compose v2 (`docker compose version`)
-- `jq` (để đọc JSON khi test) — `brew install jq`
-- Một Ollama server đã chạy sẵn, mạng này reach được (ví dụ
-  `http://192.168.1.50:11434`), và đã pull model `gemma4:e4b` trên chính
-  server đó:
-  ```bash
-  # chạy trên server đang host Ollama, KHÔNG phải máy chạy compose này
-  ollama pull gemma4:e4b
-  ```
-  Không cần API key — Ollama mặc định không xác thực.
-- Một Postgres server đã chạy sẵn:
-  - **LiteLLM và Langfuse** dùng Prisma → có thể **share chung 1 database**,
-    tách bằng schema qua `?schema=<tên>` (Prisma hiểu trực tiếp):
-    ```sql
-    CREATE SCHEMA IF NOT EXISTS litellm;
-    GRANT ALL ON SCHEMA litellm TO mirai;   -- đổi "mirai" thành user thật
+Thực thi đúng theo thứ tự trong `k3d-eks-mimic-runbook.md` (8 bước, cùng thư mục với file này).
+Sau mỗi bước, agent tự kiểm tra bằng đúng lệnh verify ghi trong runbook trước khi qua bước kế tiếp;
+nếu một bước fail, dừng lại và báo lỗi cụ thể, không tự "sửa lụi" sang hướng khác chưa được duyệt.
 
-    CREATE SCHEMA IF NOT EXISTS langfuse;
-    GRANT ALL ON SCHEMA langfuse TO mirai;
-    ```
-  - **Langflow** dùng SQLAlchemy (không phải Prisma) → **đã thử** chia
-    schema qua tham số `options=-c search_path=...` nhưng migration Alembic
-    không áp dụng đáng tin cậy (lỗi `relation "user" does not exist` khi
-    chạy thật). Kết luận: Langflow cần **DATABASE riêng**, không share
-    được theo kiểu schema như 2 cái trên:
-    ```sql
-    CREATE DATABASE langflow;
-    ```
+Thứ tự bám sát runbook:
+1. Chuẩn bị công cụ (k3d, kubectl, helm, argocd CLI) + xác nhận network `platform-net`
+2. Thêm LocalStack vào docker-compose cũ (chỉ `secretsmanager`, `ssm`)
+3. Tạo cluster k3d `eks-mimic`, gán label zone/nodegroup giả lập EKS
+4. Service + Endpoints trỏ 5 external service (postgres/redis/clickhouse/minio/localstack)
+5. Cài hạ tầng nền: MetalLB (nếu cần), cert-manager, External Secrets Operator, DNS local
+6. Bootstrap Argo CD (bước cài tay duy nhất)
+7. Tạo repo GitOps app-of-apps, deploy LiteLLM/Langflow/Langfuse/Keycloak qua Helm
+8. Build & push Hub Web App / BFF vào registry local, thêm Application tương ứng
 
-  Cả 3 đều tự tạo bảng ở lần chạy đầu, không cần chạy migration tay.
-- Một **ClickHouse** server đã chạy sẵn (Langfuse dùng để lưu trace/analytics).
-- Một **Redis** server đã chạy sẵn (Langfuse dùng làm queue).
-- Một **MinIO/S3** server đã chạy sẵn, với 1 bucket đã tạo trước (mặc định
-  tên `langfuse`, đổi qua `LANGFUSE_S3_BUCKET` nếu dùng tên khác) — Langfuse
-  dùng để lưu blob sự kiện.
+## Việc KHÔNG được làm
 
-Không cần `pip install litellm` hay `pip install langflow` — dùng thẳng
-image chính thức:
+- Không tạo tài khoản, không nhập credential thật (API key Anthropic/OpenAI thật, mật khẩu) vào
+  bất kỳ file commit lên Git — dùng placeholder hoặc secret sync qua ESO/LocalStack.
+- Không chạy `kubectl delete` trên namespace/cluster ngoài phạm vi `eks-mimic` mà agent tự tạo.
+- Không sync Argo CD với `prune: true` lên môi trường nào khác ngoài cluster `k3d-eks-mimic` local.
+- Không cài Longhorn/OpenEBS trong k3d (đã xác định không phù hợp Docker-in-Docker) — nếu cần test
+  phần này, báo lại để chuyển hướng sang k3s/VM thay vì tự ép chạy trong k3d.
+- Không đổi lựa chọn ở bảng "Quyết định đã chốt" — nếu thấy có vấn đề (ví dụ LocalStack không đáp
+  ứng), báo lại lý do cụ thể và hỏi trước khi đổi hướng, không tự âm thầm thay bằng công cụ khác.
 
-- LiteLLM: `ghcr.io/berriai/litellm:main-latest`
-  (repo: https://github.com/BerriAI/litellm)
-- Langflow: `langflowai/langflow:latest`
-  (repo: https://github.com/langflow-ai/langflow)
+## Definition of Done
 
-## 2. Chạy prototype
+Tương ứng đúng checklist ở cuối `k3d-eks-mimic-runbook.md`:
 
-```bash
-cp .env.example .env
-# Điền các biến bắt buộc trong .env:
-#   LANGFLOW_SUPERUSER / LANGFLOW_SUPERUSER_PASSWORD  (đăng nhập UI Langflow)
-#   OLLAMA_BASE_URL, DATABASE_URL                     (LiteLLM)
-#   LANGFLOW_DATABASE_URL                             (Langflow)
-#   LANGFUSE_DATABASE_URL                              (Langfuse)
-#   LANGFUSE_SALT / LANGFUSE_ENCRYPTION_KEY / NEXTAUTH_SECRET   (tự sinh:
-#     openssl rand -base64 32 / openssl rand -hex 32 / openssl rand -base64 32)
-#   CLICKHOUSE_MIGRATION_URL / CLICKHOUSE_URL / CLICKHOUSE_USER / CLICKHOUSE_PASSWORD
-#   MINIO_ENDPOINT / MINIO_ROOT_USER / MINIO_ROOT_PASSWORD / LANGFUSE_S3_BUCKET
-#   REDIS_HOST / REDIS_PORT / REDIS_PASSWORD (LiteLLM) + REDIS_CONNECTION_STRING (Langfuse)
-# (OPENAI_API_KEY/ANTHROPIC_API_KEY/AWS_* để trống — không cần cho POC này)
-# (LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY để trống lúc đầu — điền sau, xem bên dưới)
+- [ ] Node cluster có đúng label zone/nodegroup giả lập
+- [ ] Cả 5 external service (postgres/redis/clickhouse/minio/localstack) resolve và connect được
+      từ trong cluster
+- [ ] Secret tạo trong LocalStack sync thành công thành k8s Secret qua ESO
+- [ ] Argo CD: root-app + toàn bộ app con ở trạng thái `Synced` / `Healthy`
+- [ ] LiteLLM, Langflow, Langfuse, Keycloak chạy được, gọi xuyên qua nhau đúng luồng (LiteLLM →
+      Langfuse trace, Langflow → LiteLLM model call, Keycloak → Hub Web App SSO)
+- [ ] Hub Web App và BFF build/push/deploy thành công từ registry local
 
-docker compose up -d
-docker compose ps        # đợi tất cả service running
-```
+## Tài liệu tham khảo
 
-- LiteLLM (Tầng 3): http://localhost:4000
-- LiteLLM Admin UI (xem model, spend log qua UI): http://localhost:4000/ui
-- Langflow (Tầng 4): http://localhost:7860 — đăng nhập bằng
-  `LANGFLOW_SUPERUSER` / `LANGFLOW_SUPERUSER_PASSWORD` trong `.env` (đã tắt
-  auto-login, bắt buộc có tài khoản).
-- Langfuse (observability): http://localhost:3000 — lần đầu vào phải tự
-  đăng ký (sign up) 1 user, tạo Organization + Project. Sau đó vào
-  **Settings → API Keys → Create new**, copy Public Key + Secret Key vào
-  `.env` (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`), rồi:
-  ```bash
-  docker compose up -d langflow   # áp dụng key mới cho Langflow
-  ```
-
-## 3. Kiểm tra Tầng 3 độc lập (chưa cần Langflow)
-
-```bash
-./scripts/smoke_test.sh
-```
-
-Script này gọi lần lượt: health check, danh sách logical_model kèm nhãn,
-và một request `POST /chat/completions` bằng đúng tên nghiệp vụ
-`fp-analysis-default` — giống hệt cách Tầng 4 sẽ gọi.
-
-Muốn xem model nào thực sự đã trả lời request (để verify "resolved_vendor"
-đúng như thiết kế), xem field `model` trong response hoặc:
-
-```bash
-curl -s http://localhost:4000/spend/logs \
-  -H "Authorization: Bearer $LITELLM_MASTER_KEY" | jq '.[0] | {model, custom_llm_provider}'
-```
-
-## 4. Nối Tầng 4 (Langflow) vào Tầng 3
-
-Trước khi đụng vào Langflow, xác nhận Tầng 3 đã trả lời được bằng
-`./scripts/smoke_test.sh` (mục 3) — nếu bước đó lỗi thì sửa ở LiteLLM
-trước, đừng debug trong Langflow UI.
-
-**Bước cụ thể trong Langflow UI:**
-
-1. Mở http://localhost:7860 → **New Flow** (hoặc Blank Flow).
-2. Kéo 3 component vào canvas, nối theo thứ tự:
-   **Chat Input → OpenAI → Chat Output**
-   (component "OpenAI" nằm trong nhóm **Models** ở sidebar bên trái, gõ
-   "OpenAI" vào ô tìm kiếm component nếu không thấy ngay).
-3. Click vào node **OpenAI**, sửa 3 field:
-   | Field trong Langflow | Giá trị |
-   |---|---|
-   | **OpenAI API Base** (hoặc "Base URL" — nằm dưới mục *Advanced* nếu không thấy ngay) | `http://litellm:4000` — **dùng tên service `litellm`**, không phải `localhost`, vì Langflow gọi từ trong container khác trên cùng docker network |
-   | **OpenAI API Key** | giá trị `LITELLM_MASTER_KEY` trong `.env` (mặc định `sk-mirai-local`) — LiteLLM chỉ kiểm tra đây là Bearer token hợp lệ của chính nó, không liên quan gì tới OpenAI thật |
-   | **Model Name** | gõ tay `fp-analysis-default` (hoặc `cr-summarizer-fast`) |
-
-   Nếu **Model Name** là dropdown khoá cứng (chỉ cho chọn model OpenAI có
-   sẵn, không gõ được): tìm nút bút chì/"Edit" cạnh field đó, hoặc bật
-   **Advanced** ở panel component — Langflow luôn có cách nhập model name
-   tự do vì đây chính là cơ chế để dùng API OpenAI-compatible của bên thứ 3
-   (LiteLLM, vLLM, LocalAI...).
-4. Chạy thử ở **Playground** (nút phía trên canvas), gõ 1 câu hỏi, xem
-   Chat Output có trả lời không.
-
-**Nếu dùng Agent component** (thay vì OpenAI + Chat Output đơn giản):
-component **Agent** trong Langflow có dropdown "Model Provider" — chọn
-**OpenAI**, sau đó đúng 3 field ở trên (API Base / API Key / Model Name)
-sẽ hiện inline ngay trong Agent, điền y hệt bảng trên.
-
-**Debug nhanh nếu lỗi:**
-- *Connection refused / timeout*: dùng nhầm `localhost:4000` thay vì
-  `litellm:4000` trong network của docker compose.
-- *401 Unauthorized*: sai `OpenAI API Key` — phải đúng `LITELLM_MASTER_KEY`.
-- *404 / model not found*: gõ sai `logical_model` — đối chiếu với
-  `curl http://localhost:4000/v1/models -H "Authorization: Bearer $LITELLM_MASTER_KEY"`.
-
-Vì đây là component "OpenAI-compatible" chuẩn của Langflow trỏ `base_url`
-vào LiteLLM, **không có dòng code custom nào** ở Tầng 4 — đúng nguyên tắc
-"Tầng 4 chỉ gọi vào một API thống nhất" trong ARCHITECTURE.md.
-
-Khi Langflow prototype này được nâng cấp lên LangGraph/LangChain thật
-(bước tiếp theo trong ARCHITECTURE.md), nguyên tắc giữ nguyên: mọi
-LLM call trong graph phải trỏ `base_url=http://<hub>:4000` +
-`model=<logical_model>`, không import SDK của vendor trực tiếp.
-
-## 5. Thêm/đổi model (chỉ sửa Tầng 3, Tầng 4 không cần deploy lại)
-
-Sửa `layer3-litellm/config.yaml` (thêm entry vào `model_list`, khai báo
-`model_info` và fallback nếu cần), rồi:
-
-```bash
-docker compose restart litellm
-```
-
-Logical model mới lập tức xuất hiện ở `GET /model/info` — Langflow chỉ
-việc gõ đúng tên mới, không cần sửa gì bên Tầng 4.
-
-## 6. Dừng / dọn dẹp
-
-```bash
-docker compose down
-```
-
-Không có volume cục bộ nào trong repo này — Ollama, Postgres, ClickHouse,
-Redis, MinIO đều là server ngoài, dữ liệu của chúng không bị ảnh hưởng bởi
-`docker compose down`. Flow của Langflow cũng an toàn vì đã trỏ ra Postgres
-ngoài, không còn phụ thuộc SQLite trong container nữa.
+- `k3d-eks-mimic-runbook.md` — chi tiết lệnh, manifest, values cho từng bước ở trên.
