@@ -52,9 +52,12 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
 
 ## Việc tiếp theo (chưa làm)
 
-- [ ] Seed secret thật vào LocalStack cho các app khác (Langfuse, Langflow)
-      — thay cho giá trị đang nằm trong `.env` đã bị commit (cảnh báo bảo
-      mật đang treo, chưa xử lý)
+- [x] Seed secret thật vào LocalStack cho các app khác (Langfuse, Langflow)
+      — `mirai/langfuse`, `mirai/langflow` trong
+      [`../localstack/seed-secrets.sh`](../localstack/seed-secrets.sh). Field
+      là best-guess theo `.env` (chưa có chart/values.yaml thật để biết tên
+      field chính xác ExternalSecret cần trích — nhiều khả năng phải reshape
+      lại khi thật sự viết `infra/apps/langfuse/`, giống bài học ở LiteLLM).
 - [ ] Deploy Langfuse vào `mirai-eks` (hoặc trỏ `LANGFUSE_HOST=
       http://host.k3d.internal:<port>` giống pattern LocalStack) rồi bật lại
       `success_callback`/`failure_callback` trong `proxy_config` của LiteLLM

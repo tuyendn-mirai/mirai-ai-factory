@@ -43,6 +43,36 @@ seed_secret "mirai/litellm" "Credentials cho LiteLLM (layer3)" '{
   "REDIS_DB": "1"
 }'
 
+# Langfuse/Langflow: CHƯA deploy vào mirai-eks (chưa có chart/values.yaml
+# thật để biết đúng tên field ExternalSecret cần trích) — field ở đây là
+# best-guess theo tên biến trong .env gốc repo, giữ nguyên bài học từ
+# LiteLLM: nhiều khả năng phải reshape lại (đổi tên key, tách/gộp field)
+# một khi thật sự viết infra/apps/langfuse/ và infra/apps/langflow/. Chỉ
+# chứa credential thật cần cho CHÍNH app đó khởi động — không chứa
+# LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY (key phía consumer, tạo sau khi
+# có UI Langfuse chạy, không phải lúc deploy Langfuse) hay host/port (config
+# thường, không phải secret — sẽ vào values.yaml khi viết app thật, giống
+# db.endpoint của litellm).
+seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
+  "DB_USERNAME": "mirai",
+  "DB_PASSWORD": "Adgjmptw1",
+  "CLICKHOUSE_USER": "mirai",
+  "CLICKHOUSE_PASSWORD": "Adgjmptw1",
+  "REDIS_PASSWORD": "Adgjmptw1",
+  "MINIO_ROOT_USER": "langfuse",
+  "MINIO_ROOT_PASSWORD": "Adgjmptw1",
+  "LANGFUSE_SALT": "fqQqfZJ+3ppm5LBLyiA00I4Cd/GLWg/AApygkO/HrBM=",
+  "LANGFUSE_ENCRYPTION_KEY": "f7ba6e5fab85c550ac77042c300d5bf5b632a43406d37d934105732159473a61",
+  "NEXTAUTH_SECRET": "d/N4lKAMRxoaGbRhowCmYaQKDghEcB/WyOk5zq9oDGQ="
+}'
+
+seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4)" '{
+  "LANGFLOW_SUPERUSER": "admin",
+  "LANGFLOW_SUPERUSER_PASSWORD": "Adgjmptw1",
+  "DB_USERNAME": "mirai",
+  "DB_PASSWORD": "Adgjmptw1"
+}'
+
 echo
 echo "Nếu ExternalSecret trong cluster đã sync trước đó (Secret k8s vẫn còn cache"
 echo "giá trị cũ), force sync lại bằng:"
