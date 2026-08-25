@@ -80,10 +80,32 @@ curl http://langfuse.mirai.local/api/public/health
 (cần `127.0.0.1 langfuse.mirai.local` trong `/etc/hosts` trên máy chạy trình
 duyệt — xem lưu ý SSH remote trong [`../../argocd/README.md`](../../argocd/README.md))
 
+## LANGFUSE_MIGRATION_V4_WRITE_MODE — bắt buộc để LiteLLM ghi được trace
+
+LiteLLM (và nhiều SDK khác hiện tại) vẫn gửi trace qua endpoint cũ
+`/api/public/ingestion`. Langfuse v4 (appVersion chart này) mặc định chạy
+"events_only mode" và **âm thầm từ chối** các event đó (chỉ thấy trong log
+`langfuse-web`: `Rejected N event(s) from the legacy /api/public/ingestion
+endpoint ... this Langfuse v4 deployment runs in events_only mode` — LiteLLM
+phía gửi vẫn báo lỗi mù mờ "Bad request"). Đã bật
+`langfuse.additionalEnv: LANGFUSE_MIGRATION_V4_WRITE_MODE=dual` (cầu nối
+Langfuse tự đề xuất trong chính log lỗi) trên cả web lẫn worker. Verify thật
+bằng cách query thẳng ClickHouse (API `/api/public/traces` đã bị chặn ở chế
+độ events_only):
+
+```bash
+kubectl run ch-query --image=clickhouse/clickhouse-server:26.4 --restart=Never --rm -i --command -- \
+  clickhouse-client --host host.k3d.internal --port 9004 --user mirai --password <CLICKHOUSE_PASSWORD> --database langfuse \
+  --query "SELECT count() FROM traces WHERE project_id = '<project_id>' AND created_at > now() - INTERVAL 10 MINUTE"
+```
+
 ## Trạng thái hiện tại
 
 Langfuse chạy trong `mirai-eks`, Postgres/Redis/ClickHouse/MinIO nối qua
 `host.k3d.internal`, đọc credential qua ExternalSecret từ LocalStack (kể cả
-salt/encryption-key/nextauth-secret — không plaintext). Chưa nối
-`success_callback`/`failure_callback` của LiteLLM vào đây (việc tiếp theo,
-xem [`../../README.md`](../../README.md)).
+salt/encryption-key/nextauth-secret — không plaintext). Đã nối
+`success_callback`/`failure_callback` của LiteLLM vào đây — verify bằng
+request thật + query ClickHouse, trace ghi vào đúng project. `LANGFUSE_HOST`
+của LiteLLM trỏ service nội bộ `langfuse-web.langfuse.svc.cluster.local:3000`
+(khác với Postgres/Redis — Langfuse chạy TRONG cluster, không phải container
+ngoài), xem [`../litellm/README.md`](../litellm/README.md).
