@@ -207,7 +207,17 @@ serviceAccount:
   # -- Automounts the service account token in all containers of the pod
   automount: true
   # -- Annotations to add to the service account.
-  annotations: {}
+  #
+  # eks.amazonaws.com/role-arn: convention IRSA chuẩn — client AWS SDK bên
+  # trong external-secrets tự đọc annotation này để biết role cần assume
+  # qua AssumeRoleWithWebIdentity. Thiếu annotation này (dù đã set
+  # provider.aws.role trong ClusterSecretStore) vẫn lỗi "an IAM role must
+  # be associated with service account" — 2 chỗ set role đều cần thiết,
+  # không thay thế cho nhau. Role tạo bằng
+  # ../../../localstack/setup-oidc-iam.sh — xem
+  # infra/apps/external-secrets/README.md.
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::000000000000:role/external-secrets-role"
   # -- Extra Labels to add to the service account.
   extraLabels: {}
   # -- The name of the service account to use.
