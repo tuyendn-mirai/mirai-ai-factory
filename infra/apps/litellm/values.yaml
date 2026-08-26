@@ -135,6 +135,12 @@ proxy_config:
     master_key: os.environ/PROXY_MASTER_KEY
 
   litellm_settings:
+    # Ollama không hỗ trợ encoding_format=base64 (embeddings) — client
+    # (vd. Langfuse SDK) tự gửi param này, ollama từ chối và litellm raise
+    # UnsupportedParamsError. drop_params: true để litellm tự bỏ các param
+    # provider không hỗ trợ thay vì fail request.
+    drop_params: true
+
     # requires cache: true — xem comment trên block `redis:` bên dưới.
     cache: true
     cache_params:
