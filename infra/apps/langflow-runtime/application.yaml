@@ -1,0 +1,33 @@
+# ArgoCD Application for Langflow Runtime (Tầng 4 — chạy flow đã build,
+# headless, không có UI/superuser như langflow-ide), following the
+# infra/apps/<name>/ convention.
+#
+# Chưa Healthy ngay sau khi apply: cần Secret "langflow-credentials" — do
+# infra/apps/langflow-ide/external-secret.yaml tạo (dùng CHUNG cho cả 2
+# app), xem README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langflow-runtime
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://langflow-ai.github.io/langflow-helm-charts
+      chart: langflow-runtime
+      targetRevision: "0.1.1"
+      helm:
+        valueFiles:
+          - $values/infra/apps/langflow-runtime/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: langflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -44,3 +44,5 @@ vẫn là file thủ công — xem [`../argocd/argocd-ingress.yaml`](../argocd/a
 - [`external-secrets/`](external-secrets/README.md) — Operator + ClusterSecretStore trỏ LocalStack
 - [`litellm/`](litellm/README.md) — Tầng 3, LiteLLM Proxy
 - [`langfuse/`](langfuse/README.md) — LLM observability
+- [`langflow-ide/`](langflow-ide/README.md) — Tầng 4, build/test flow (UI + API)
+- [`langflow-runtime/`](langflow-runtime/README.md) — Tầng 4, chạy flow đã build (headless)

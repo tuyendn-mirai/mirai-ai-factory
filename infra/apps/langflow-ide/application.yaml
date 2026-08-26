@@ -1,0 +1,32 @@
+# ArgoCD Application for Langflow IDE (Tầng 4 — build/test flow), following
+# the infra/apps/<name>/ convention: values.yaml is a real file in this
+# repo, referenced here via a second "values" source.
+#
+# Chưa Healthy ngay sau khi apply: Deployment cần Secret "langflow-credentials"
+# chưa tồn tại — do external-secret.yaml (cùng thư mục này) tạo, xem README.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langflow-ide
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://langflow-ai.github.io/langflow-helm-charts
+      chart: langflow-ide
+      targetRevision: "0.1.2"
+      helm:
+        valueFiles:
+          - $values/infra/apps/langflow-ide/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: langflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

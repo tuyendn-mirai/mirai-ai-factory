@@ -1,0 +1,146 @@
+replicaCount: 1
+
+image:
+  repository: "langflowai/langflow"
+  pullPolicy: Always
+  tag: latest
+
+downloadFlows:
+  path: /app/flows
+#  flows:
+#    - url: https://raw.githubusercontent.com/langflow-ai/langflow/dev/tests/data/basic_example.json
+#      basicAuth: "myuser:mypassword"
+#      headers:
+#        Authorization: "Bearer my-key"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true
+  runAsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  privileged: false
+  readOnlyRootFilesystem: true
+  runAsUser: 1000
+  runAsNonRoot: true
+  runAsGroup: 1000
+
+# Chart này chỉ có field `env` phẳng (mỗi entry 1 value/secretKeyRef trọn
+# vẹn), không có host/port/user/... rời để ghép như langflow-ide — nên
+# LANGFLOW_DATABASE_URL phải là chuỗi đầy đủ, lấy từ 1 field bundle sẵn
+# trong LocalStack (xem infra/apps/langflow-ide/external-secret.yaml, dùng
+# CHUNG Secret "langflow-credentials" với langflow-ide vì cùng namespace +
+# cùng trỏ 1 DB "langflow" — flow build ở IDE, runtime này phục vụ).
+env:
+  - name: LANGFLOW_PORT
+    value: "7860"
+  - name: LANGFLOW_LOG_LEVEL
+    value: "INFO"
+  - name: LANGFLOW_DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: langflow-credentials
+        key: database-url
+  - name: LANGFLOW_ALEMBIC_LOG_FILE
+    value: "/app/db/alembic.log"
+  - name: LANGFLOW_UPDATE_STARTER_PROJECTS
+    value: "false"
+  # Khớp docker-compose.yml gốc repo — flow chạy ở runtime cũng cần gọi
+  # được LiteLLM/Langfuse trong cluster, xem
+  # infra/apps/langflow-ide/values.yaml.
+  - name: MIRAI_HUB_BASE_URL
+    value: "http://litellm.litellm.svc.cluster.local:4000"
+  - name: LANGFLOW_SSRF_ALLOWED_HOSTS
+    value: "litellm.litellm.svc.cluster.local,langfuse-web.langfuse.svc.cluster.local"
+
+
+service:
+  type: ClusterIP
+  port: 7860
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: langflow-runtime.mirai.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /api/v1/version
+    port: http
+readinessProbe:
+  httpGet:
+    path: /api/v1/version
+    port: http
+
+volumes:
+  - name: flows
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
+  - name: data
+    emptyDir: {}
+  - name: db
+    emptyDir: {}
+
+volumeMounts:
+  - name: flows
+    mountPath: /app/flows
+    readOnly: false
+  - name: tmp
+    mountPath: /tmp
+    readOnly: false
+  - name: data
+    mountPath: /app/data
+    readOnly: false
+  - name: db
+    mountPath: /app/db
+    readOnly: false
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+

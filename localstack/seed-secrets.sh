@@ -48,11 +48,6 @@ seed_secret "mirai/litellm" "Credentials cho LiteLLM (layer3)" '{
 
 # Langfuse: đã deploy (infra/apps/langfuse/), field bên dưới khớp đúng
 # ExternalSecret ở đó (xem infra/apps/langfuse/external-secret.yaml).
-#
-# Langflow: CHƯA deploy vào mirai-eks (chưa có chart/values.yaml thật để
-# biết đúng tên field ExternalSecret cần trích) — field ở đây là best-guess
-# theo tên biến trong .env gốc repo, nhiều khả năng phải reshape lại khi
-# thật sự viết infra/apps/langflow/, giống bài học ở LiteLLM/Langfuse.
 seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
   "DB_USERNAME": "mirai",
   "DB_PASSWORD": "Adgjmptw1",
@@ -66,11 +61,24 @@ seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
   "NEXTAUTH_SECRET": "d/N4lKAMRxoaGbRhowCmYaQKDghEcB/WyOk5zq9oDGQ="
 }'
 
-seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4)" '{
+# Langflow: đã deploy (infra/apps/langflow-ide/, infra/apps/langflow-runtime/)
+# — 2 chart riêng (IDE build flow + Runtime chạy flow đã build) dùng CHUNG 1
+# DB "langflow" (không phải schema trong ai_factory như litellm/langfuse —
+# .env gốc repo tách hẳn DB riêng) để runtime phục vụ được flow build từ IDE.
+# DB_PASSWORD dùng cho externalDatabase.password của langflow-ide (field rời
+# host/port/user/password/database, hỗ trợ secretKeyRef). LANGFLOW_DATABASE_URL
+# (chuỗi đầy đủ) dùng cho langflow-runtime — chart đó chỉ có field `env` phẳng
+# (mỗi entry 1 value/secretKeyRef trọn vẹn, không có host/port/user rời để
+# ghép), nên phải bundle sẵn cả URL. LANGFLOW_SECRET_KEY mới generate (chưa
+# có trong .env — Fernet-style key mã hoá credential lưu trong flow, generate
+# bằng: python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())").
+seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4) — IDE + Runtime" '{
   "LANGFLOW_SUPERUSER": "admin",
   "LANGFLOW_SUPERUSER_PASSWORD": "Adgjmptw1",
   "DB_USERNAME": "mirai",
-  "DB_PASSWORD": "Adgjmptw1"
+  "DB_PASSWORD": "Adgjmptw1",
+  "LANGFLOW_DATABASE_URL": "postgresql://mirai:Adgjmptw1@host.k3d.internal:5435/langflow",
+  "LANGFLOW_SECRET_KEY": "_amV3KBbYmcoDhncCu0fMzovj6KsyLVwkHWfN9LF0L4="
 }'
 
 echo

@@ -46,7 +46,9 @@ infra/
 └── apps/            # Mỗi app cài qua Helm/ArgoCD — xem infra/apps/README.md
     ├── external-secrets/
     ├── litellm/
-    └── langfuse/
+    ├── langfuse/
+    ├── langflow-ide/
+    └── langflow-runtime/
 ```
 
 Xem README trong từng thư mục con để biết chi tiết cách dựng.
@@ -64,14 +66,27 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
       ClickHouse/MinIO nối qua `host.k3d.internal`, đọc credential (kể cả
       salt/encryption-key/nextauth-secret) qua ExternalSecret — không
       plaintext như `masterkey` của LiteLLM.
-- [ ] Trỏ `LANGFUSE_HOST=http://langfuse-web.langfuse.svc.cluster.local:3000`
+- [x] Trỏ `LANGFUSE_HOST=http://langfuse-web.langfuse.svc.cluster.local:3000`
       rồi bật lại `success_callback`/`failure_callback` trong `proxy_config`
-      của LiteLLM (`infra/apps/litellm/values.yaml`)
-- [ ] Deploy Langflow (Tầng 4) qua ArgoCD, trỏ vào `http://litellm.litellm.svc.cluster.local:4000`
+      của LiteLLM — xem [`apps/litellm/README.md`](apps/litellm/README.md).
+      Phát sinh thêm: Langfuse v4 mặc định "events_only mode" từ chối event
+      LiteLLM gửi (endpoint cũ) — fix bằng
+      `LANGFUSE_MIGRATION_V4_WRITE_MODE=dual`, xem
+      [`apps/langfuse/README.md`](apps/langfuse/README.md).
+- [x] Deploy Langflow (Tầng 4) qua ArgoCD — CẢ `langflow-ide` (build/test,
+      có UI) LẪN `langflow-runtime` (chạy flow đã build, headless), xem
+      [`apps/langflow-ide/README.md`](apps/langflow-ide/README.md) /
+      [`apps/langflow-runtime/README.md`](apps/langflow-runtime/README.md).
+      `MIRAI_HUB_BASE_URL`/`LANGFLOW_SSRF_ALLOWED_HOSTS` đã trỏ vào
+      LiteLLM/Langfuse trong cluster.
+- [ ] Export flow thật từ `langflow-ide`, trỏ `langflow-runtime`'s
+      `downloadFlows.flows` vào đó để runtime có flow phục vụ (hiện đang
+      rỗng)
 - [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công
       (`infra/argocd/argocd-ingress.yaml`,
       `infra/apps/external-secrets/clustersecretstore.yaml`,
       `infra/apps/litellm/external-secret.yaml`,
-      `infra/apps/langfuse/external-secret.yaml`) bằng chính ArgoCD
+      `infra/apps/langfuse/external-secret.yaml`,
+      `infra/apps/langflow-ide/external-secret.yaml`) bằng chính ArgoCD
       (app-of-apps hoặc thêm làm source thứ 3 trong multi-source Application)
       thay vì `kubectl apply` thủ công

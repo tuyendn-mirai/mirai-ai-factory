@@ -1,0 +1,277 @@
+imagePullSecrets: []
+
+nameOverride: "langflow-service"
+# Override for the name of the helm deployment
+# Note: using `langflow` as service name causes
+# env var collision when deploying on openshift
+# https://github.com/langflow-ai/langflow/issues/4330#issuecomment-2459097917
+fullnameOverride: "langflow-service"
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the
+  # fullname template
+  name: ""
+
+# Chart này KHÔNG có field ingressClassName/className (khác litellm-helm,
+# langfuse, langflow-runtime) — dùng annotation legacy
+# kubernetes.io/ingress.class, ingress-nginx vẫn hỗ trợ song song với
+# spec.ingressClassName.
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: langflow.mirai.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  runAsGroup: 1000
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true
+  runAsGroup: 1000
+
+
+langflow:
+  global:
+    image:
+      tag: "latest"
+  backend:
+    replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 7860
+    backendOnly: true
+    numWorkers: 1
+    image:
+      repository: langflowai/langflow
+      imagePullPolicy: IfNotPresent
+      tag: latest
+    command:
+      - python
+      - -m
+      - langflow
+      - run
+      - --host
+      - 0.0.0.0
+      - --backend-only
+    resources:
+      requests:
+        cpu: 0.5
+        memory: 1Gi
+      # limits:
+      #   cpu: 0.5
+      #   memory: 1Gi
+    probe:
+      failureThreshold: 3
+      periodSeconds: 10
+      timeoutSeconds: 5
+      initialDelaySeconds: 5
+    env:
+      - name: LANGFLOW_PORT
+        value: "7860"
+      - name: LANGFLOW_ALEMBIC_LOG_FILE
+        value: "/app/db/alembic.log"
+      - name: LANGFLOW_UPDATE_STARTER_PROJECTS
+        value: "false"
+      # Khớp docker-compose.yml gốc repo (MIRAI_HUB_BASE_URL,
+      # LANGFLOW_SSRF_ALLOWED_HOSTS) — đổi hostname docker-compose network
+      # (litellm, langfuse-web) sang service DNS nội bộ k8s. Không phải
+      # secret, litellm không cần key ở env này (master key nhập trong UI
+      # khi cấu hình credential "OpenAI API Key" của từng flow).
+      - name: MIRAI_HUB_BASE_URL
+        value: "http://litellm.litellm.svc.cluster.local:4000"
+      - name: LANGFLOW_SSRF_ALLOWED_HOSTS
+        value: "litellm.litellm.svc.cluster.local,langfuse-web.langfuse.svc.cluster.local"
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    podAnnotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: 9090
+      prometheus.io/path: "/metrics"
+
+    securityContext:
+      capabilities:
+        drop:
+          - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      runAsGroup: 1000
+
+    podSecurityContext:
+      fsGroup: 1000
+      runAsUser: 1000
+      runAsNonRoot: true
+      runAsGroup: 1000
+
+    # Postgres chạy sẵn qua docker-compose ở gốc repo (trên máy host cụm k3d
+    # này, cùng pattern litellm/langfuse) — DB "langflow" riêng (không phải
+    # schema trong ai_factory), dùng CHUNG với infra/apps/langflow-runtime/
+    # để runtime phục vụ được flow build từ IDE. Mỗi field ở đây phải là 1
+    # object EnvVar hợp lệ (value hoặc valueFrom) — chart nối thẳng
+    # {{ toYaml ... }}, không phải scalar thường như litellm-helm/langfuse.
+    externalDatabase:
+      # Compose in the SQLAlchemy format:
+      # https://docs.sqlalchemy.org/en/20/core/engines.html#database-urls
+      enabled: true
+      driver:
+        value: "postgresql"
+      host:
+        value: "host.k3d.internal"
+      port:
+        value: "5435"
+      user:
+        value: "mirai"
+      password:
+        valueFrom:
+          secretKeyRef:
+            key: db-password
+            name: langflow-credentials
+      database:
+        value: "langflow"
+
+    volumes:
+      - name: flows
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
+      - name: db
+        emptyDir: {}
+
+    volumeMounts:
+      - name: flows
+        mountPath: /app/flows
+        readOnly: false
+      - name: tmp
+        mountPath: /tmp
+        readOnly: false
+      - name: data
+        mountPath: /app/data
+        readOnly: false
+      - name: db
+        mountPath: /app/db
+        readOnly: false
+
+    # Tắt vì đã dùng externalDatabase ở trên — sqlite chỉ là fallback khi
+    # không có Postgres ngoài.
+    sqlite:
+      enabled: false
+      volume:
+        size: "1Gi"
+        existingStorageClassName: "default"
+        # If you want the chart to create storage classes, then don't set
+        # existingStorageClassName name and provide configuration values
+        # for the storage class. The settings vary based on cloud
+        # provider. Below are examples for AWS, GCP, and Azure.
+
+        # For AWS
+        # storageClass:
+        #  provisioner: kubernetes.io/aws-ebs
+        #  type: gp2
+        #  fsType: ext4
+        #  extraParams:
+        #     iopsPerGB: "10"
+
+        # For GCP
+        # storageClass:
+        #   provisioner: kubernetes.io/gce-pd
+        #   type: pd-ssd
+        #   fsType: ext4
+        #   extraParams:
+        #      replication-type: none
+
+        # For Azure
+        # storageClass:
+        #   provisioner: kubernetes.io/azure-disk
+        #   fsType: ext4
+        #   type: managed-premium
+        #   extraParams:
+        #     storageaccounttype: Premium_LRS
+        #     kind: Managed
+        #     cachingmode: ReadOnly
+        storageClass: {}
+
+    # Khối này CHỈ render nếu autoLogin có mặt trong values VÀ = false (xem
+    # templates/backend-statefulset.yaml: "if hasKey ... autoLogin) (eq ...
+    # autoLogin false)") — thiếu autoLogin thì superuser/secretKey bên dưới
+    # cũng bị bỏ qua luôn, không phải chỉ mỗi autoLogin.
+    #
+    # superuserPassword/secretKey chỉ nhận value literal — template không hỗ
+    # trợ valueFrom/secretKeyRef ở đây (khác externalDatabase.password phía
+    # trên), và không dùng lookup nên để trống sẽ random MỚI mỗi lần render
+    # (giống vấn đề masterkey của litellm-helm, xem
+    # ../litellm/README.md) — set cứng plaintext, chấp nhận cùng rủi ro/lý
+    # do đã chấp nhận ở đó cho POC local.
+    autoLogin: false
+    superuser: "admin"
+    superuserPassword: "Adgjmptw1"
+    secretKey: "_amV3KBbYmcoDhncCu0fMzovj6KsyLVwkHWfN9LF0L4="
+    newUserIsActive: false
+
+  frontend:
+    enabled: true
+    replicaCount: 1
+    service:
+      type: ClusterIP
+      port: 8080
+    image:
+      repository: langflowai/langflow-frontend
+      imagePullPolicy: IfNotPresent
+      tag: latest
+    resources:
+      requests:
+        cpu: 0.3
+        memory: 512Mi
+      # limits:
+      #   cpu: 0.3
+      #   memory: 512Mi
+    probe:
+      failureThreshold: 3
+      periodSeconds: 10
+      timeoutSeconds: 5
+      initialDelaySeconds: 5
+    nodeSelector: {}
+
+    tolerations: []
+
+    affinity: {}
+    podAnnotations: {}
+
+    volumes:
+      - name: tmp
+        emptyDir: {}
+
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+        readOnly: false
+
+secretProvider:
+  enabled: false
+
+postgresql:
+  enabled: false
+
