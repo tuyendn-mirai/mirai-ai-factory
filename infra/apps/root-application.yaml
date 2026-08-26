@@ -1,0 +1,30 @@
+# App-of-apps gốc: quét infra/apps/*/application.yaml, ArgoCD tự tạo/xoá
+# các Application con theo đúng nội dung trong git — từ đây trở đi thêm app
+# mới chỉ cần tạo infra/apps/<name>/application.yaml + push, không cần
+# `kubectl apply` tay nữa. Xem infra/apps/README.md.
+#
+# File này CHÍNH NÓ vẫn phải `kubectl apply` tay 1 lần duy nhất (bootstrap —
+# không có gì tự apply cái đầu tiên). Đặt trực tiếp trong infra/apps/, KHÔNG
+# phải infra/apps/root/application.yaml, để glob "*/application.yaml" (1
+# cấp thư mục con) không tự khớp vào chính nó — tránh vòng lặp tự quản lý.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+    targetRevision: main
+    path: infra/apps
+    directory:
+      recurse: true
+      include: "*/application.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
