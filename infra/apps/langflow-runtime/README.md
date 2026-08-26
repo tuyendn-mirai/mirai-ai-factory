@@ -49,9 +49,21 @@ curl http://langflow-runtime.mirai.local/api/v1/version
 chạy trình duyệt — xem lưu ý SSH remote trong
 [`../../argocd/README.md`](../../argocd/README.md))
 
+## Sự cố đã gặp: crash-loop thiếu LANGFLOW_SUPERUSER_PASSWORD
+
+Chart mặc định không set superuser (đúng — runtime không có UI đăng nhập),
+nhưng bản thân **app Langflow tự bắt buộc `setup_superuser()` lúc khởi
+động, kể cả chạy `--backend-only`** — không liên quan gì đến field nào chart
+gate. Thiếu `LANGFLOW_SUPERUSER_PASSWORD` → crash-loop với lỗi `ValueError:
+Username and password must be set`. Fix: thêm đúng 5 biến
+`LANGFLOW_AUTO_LOGIN`/`SUPERUSER`/`SUPERUSER_PASSWORD`/`SECRET_KEY`/
+`NEW_USER_IS_ACTIVE` — **giá trị giống hệt** `langflow-ide` (xem
+`../langflow-ide/values.yaml`) vì chung 1 DB/user table, setup này idempotent
+(tìm thấy superuser đã có sẵn, không tạo trùng).
+
 ## Trạng thái hiện tại
 
 Langflow Runtime chạy trong `mirai-eks`, cùng Postgres `langflow` với
 `langflow-ide`, `MIRAI_HUB_BASE_URL`/`LANGFLOW_SSRF_ALLOWED_HOSTS` đã trỏ
-vào LiteLLM/Langfuse. Chưa có flow nào để phục vụ (chưa build/export gì từ
-IDE).
+vào LiteLLM/Langfuse. Verify: `curl http://langflow-runtime.mirai.local/api/v1/version`
+→ `200`. Chưa có flow nào để phục vụ (chưa build/export gì từ IDE).

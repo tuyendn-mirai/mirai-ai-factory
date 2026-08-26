@@ -74,11 +74,13 @@ duyệt — xem lưu ý SSH remote trong [`../../argocd/README.md`](../../argocd
 
 ## Trạng thái hiện tại
 
-Langflow IDE chạy trong `mirai-eks`, Postgres nối qua `host.k3d.internal`,
-đăng nhập bằng `admin`/mật khẩu trong `values.yaml`. `MIRAI_HUB_BASE_URL`/
+Langflow IDE chạy trong `mirai-eks` (backend + frontend đều `1/1 Running`),
+Postgres nối qua `host.k3d.internal`. `MIRAI_HUB_BASE_URL`/
 `LANGFLOW_SSRF_ALLOWED_HOSTS` đã trỏ vào LiteLLM/Langfuse qua service DNS
-nội bộ k8s (khớp `MIRAI_HUB_BASE_URL`/`LANGFLOW_SSRF_ALLOWED_HOSTS` trong
-`docker-compose.yml` gốc repo, chỉ đổi hostname). Còn thiếu: nhập
-`LITELLM_MASTER_KEY` làm "OpenAI API Key" khi cấu hình credential cho từng
-flow trong UI — không cấu hình được qua Helm values (state của flow nằm
-trong DB, không phải infra).
+nội bộ k8s (khớp `docker-compose.yml` gốc repo, chỉ đổi hostname). Verify
+login thật: `curl -X POST http://langflow.mirai.local/api/v1/login -d
+"username=admin&password=..."` → `200`.
+
+Còn thiếu: nhập `LITELLM_MASTER_KEY` làm "OpenAI API Key" khi cấu hình
+credential cho từng flow trong UI — không cấu hình được qua Helm values
+(state của flow nằm trong DB, không phải infra).
