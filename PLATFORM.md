@@ -123,6 +123,15 @@ nằm trong README của app tương ứng:
   không theo container — nhiều lần container tự restart (do máy có hiện
   tượng gián đoạn hệ thống, chưa rõ nguyên nhân gốc) mà không xoá được cache
   hỏng, gây lỗi `object file ... is empty` khi sync. Fix: xoá hẳn pod.
+- **LocalStack STS**: `AssumeRoleWithWebIdentity` **không verify chữ ký
+  JWT/issuer/role tồn tại** — đã tự test bằng JWT giả + role ARN không tồn
+  tại, vẫn nhận credential thật. `ClusterSecretStore` đã đổi từ static
+  access key (`test`/`test`) sang `auth.jwt` kiểu IRSA (script
+  [`localstack/setup-oidc-iam.sh`](localstack/setup-oidc-iam.sh) tạo OIDC
+  provider + role + trust policy), nhưng đây chỉ là tập dượt đúng SHAPE cấu
+  hình IRSA thật, KHÔNG phải test enforcement/bảo mật thật — không cần xoá/
+  tạo lại cluster vì LocalStack không bao giờ gọi ra ngoài để verify issuer.
+  Chi tiết: [`infra/apps/external-secrets/README.md`](infra/apps/external-secrets/README.md).
 
 ## So với bản kế hoạch gốc
 

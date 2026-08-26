@@ -83,6 +83,15 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
 - [ ] Export flow thật từ `langflow-ide`, trỏ `langflow-runtime`'s
       `downloadFlows.flows` vào đó để runtime có flow phục vụ (hiện đang
       rỗng)
+- [x] Đổi `ClusterSecretStore` từ static access key (`test`/`test`) sang
+      `auth.jwt` kiểu IRSA — xem
+      [`apps/external-secrets/README.md`](apps/external-secrets/README.md).
+      Không cần xoá/tạo lại cluster: đã tự test LocalStack **không verify**
+      chữ ký JWT/issuer lúc `AssumeRoleWithWebIdentity`, nên chỉ cần tập
+      dượt đúng shape cấu hình (ServiceAccount annotation, trust policy,
+      OIDC provider — script
+      [`../localstack/setup-oidc-iam.sh`](../localstack/setup-oidc-iam.sh)),
+      không cần issuer reachable thật từ ngoài cluster.
 - [x] App-of-apps cho `infra/apps/*/application.yaml` — xem
       [`apps/root-application.yaml`](apps/root-application.yaml) và
       [`apps/README.md`](apps/README.md#app-of-apps-tự-động-nhận-app-mới).
