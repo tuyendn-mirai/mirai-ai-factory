@@ -44,6 +44,7 @@ infra/
 ├── argocd/          # Manifest cài ArgoCD (pinned) + Ingress riêng của nó
 │                    # (ArgoCD không phải Helm chart nên không có infra/apps/argocd/)
 └── apps/            # Mỗi app cài qua Helm/ArgoCD — xem infra/apps/README.md
+    ├── root-application.yaml  # app-of-apps gốc, quét */application.yaml
     ├── external-secrets/
     ├── litellm/
     ├── langfuse/
@@ -82,11 +83,17 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
 - [ ] Export flow thật từ `langflow-ide`, trỏ `langflow-runtime`'s
       `downloadFlows.flows` vào đó để runtime có flow phục vụ (hiện đang
       rỗng)
-- [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công
+- [x] App-of-apps cho `infra/apps/*/application.yaml` — xem
+      [`apps/root-application.yaml`](apps/root-application.yaml) và
+      [`apps/README.md`](apps/README.md#app-of-apps-tự-động-nhận-app-mới).
+      Thêm app mới từ giờ chỉ cần commit + push, không cần `kubectl apply`
+      tay cho `application.yaml` nữa.
+- [ ] Cân nhắc quản lý các manifest kubectl-apply thủ công còn lại — KHÔNG
+      phải kind `Application` nên app-of-apps ở trên không tự động hoá được
       (`infra/argocd/argocd-ingress.yaml`,
       `infra/apps/external-secrets/clustersecretstore.yaml`,
       `infra/apps/litellm/external-secret.yaml`,
       `infra/apps/langfuse/external-secret.yaml`,
-      `infra/apps/langflow-ide/external-secret.yaml`) bằng chính ArgoCD
-      (app-of-apps hoặc thêm làm source thứ 3 trong multi-source Application)
+      `infra/apps/langflow-ide/external-secret.yaml`) — cần thêm làm source
+      thứ 3 (kiểu `directory`) trong multi-source Application của từng app
       thay vì `kubectl apply` thủ công

@@ -45,10 +45,11 @@ không có cách khác (ghi rõ từng chỗ trong README của app đó).
 
 ## Trạng thái hiện tại
 
-Tất cả 5 ArgoCD Application `Synced` + `Healthy`:
+Tất cả 6 ArgoCD Application `Synced` + `Healthy`:
 
 | Application | Namespace | Chart |
 |---|---|---|
+| `apps` | `argocd` | *(app-of-apps gốc, `source.directory` quét `infra/apps/*/application.yaml` — không phải Helm chart)* |
 | `external-secrets` | `external-secrets` | `charts.external-secrets.io` `2.9.0` |
 | `litellm` | `litellm` | OCI `ghcr.io/berriai/litellm-helm` `0.1.100` |
 | `langfuse` | `langfuse` | `langfuse.github.io/langfuse-k8s` `2.0.2` |
@@ -131,7 +132,7 @@ lực:
 | MetalLB cho LoadBalancer Service | Không dùng — `ingress-nginx` DaemonSet + `hostPort`, k3d serverlb đã đủ |
 | cert-manager | Chưa dùng — mọi ingress hiện là HTTP thuần nội bộ |
 | Keycloak | Chưa deploy |
-| Argo CD app-of-apps | Mỗi app là 1 Application độc lập trong `infra/apps/`, không qua app-of-apps (cân nhắc lại ở TODO) |
+| Argo CD app-of-apps | Đã có (`infra/apps/root-application.yaml`) — nhưng chỉ quản lý object `Application`, không quản lý manifest thường (`ExternalSecret`, `ClusterSecretStore`, `argocd-ingress.yaml`), xem TODO |
 | Build & push Hub Web App / BFF | Chưa làm — ngoài phạm vi các bước đã thực hiện |
 | LiteLLM/Langflow/Langfuse chạy docker-compose song song k8s | docker-compose ở gốc repo đã bị xoá, k8s là bản DUY NHẤT còn chạy |
 
