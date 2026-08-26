@@ -33,8 +33,9 @@ kubectl get externalsecret -n litellm
 # STATUS: SecretSynced, READY: True cho cả 2
 ```
 
-Nếu LocalStack mất secret (persistence không hoạt động ở bản Community —
-xem [`../../../localstack/README.md`](../../../localstack/README.md)) và
+Nếu LocalStack mất secret (ví dụ volume bị xoá tay — với image/token đúng
+hiện tại persistence hoạt động thật qua restart bình thường, xem
+[`../../../localstack/README.md`](../../../localstack/README.md)) và
 ExternalSecret đã sync trước đó (Secret k8s vẫn còn cache giá trị cũ), force
 sync lại:
 

@@ -9,18 +9,23 @@ services:
   # Pod trong mirai-eks gọi vào đây qua http://host.k3d.internal:4566
   # (hostname này k3d tự tạo sẵn khi tạo cluster, trỏ về gateway của host).
   localstack:
-    # Pinned to a pre-2026-calendar-versioning tag: newer `latest`/`2026.*`
-    # builds require a LOCALSTACK_AUTH_TOKEN (free account) even for
-    # community services like Secrets Manager — this tag still runs fully
-    # unauthenticated.
-    image: localstack/localstack:4.13.1
+    # 4.13.1 (bản cũ, trước khi có LOCALSTACK_AUTH_TOKEN) KHÔNG nhận đúng
+    # license Student dù set token — build quá cũ, chưa tích hợp license
+    # flow cho tier này (log không hề có dòng "licensingv2 ... activated"),
+    # nên PERSISTENCE/ENFORCE_IAM set mà không chạy. Đổi sang bản đã tự test
+    # thật: log có "Successfully requested and activated new license
+    # ...:student", secret sống sót qua restart, role gắn Deny policy bị
+    # AccessDeniedException đúng như AWS thật — cả 2 đều hoạt động.
+    image: localstack/localstack:2026.7.5
     container_name: mirai-localstack
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=secretsmanager
+      - SERVICES=secretsmanager,iam,sts
       - DEBUG=${DEBUG:-0}
       - PERSISTENCE=1
+      - ENFORCE_IAM=1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN in localstack/.env (bản Student, xem localstack/.env.example) — không hard-code token thật vào file này, file này commit lên git}
     volumes:
       - "./volume:/var/lib/localstack"
     restart: unless-stopped

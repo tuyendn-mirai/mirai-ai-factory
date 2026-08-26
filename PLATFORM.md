@@ -26,7 +26,7 @@ Máy host (1 máy Linux, chạy mọi thứ)
 │     "host.k3d.internal" (KHÔNG hard-code IP — xem localstack/README.md)
 │
 ├── localstack/ (docker compose riêng, repo này định nghĩa)
-│   ├── localstack        — mock AWS Secrets Manager (KHÔNG persistence, xem README)
+│   ├── localstack        — mock AWS Secrets Manager (LocalStack for Students, persistence + IAM enforcement thật, xem README)
 │   └── stackport          — UI xem secret (http://localhost:8090)
 │
 └── Cụm k3d "mirai-eks" (mô phỏng đặc điểm vận hành AWS EKS)
@@ -87,7 +87,7 @@ verify đã chạy thật:
 - [`infra/apps/langfuse/README.md`](infra/apps/langfuse/README.md) — observability
 - [`infra/apps/langflow-ide/README.md`](infra/apps/langflow-ide/README.md) — Tầng 4, build/test
 - [`infra/apps/langflow-runtime/README.md`](infra/apps/langflow-runtime/README.md) — Tầng 4, chạy flow
-- [`localstack/README.md`](localstack/README.md) — mock Secrets Manager, giới hạn persistence, script seed
+- [`localstack/README.md`](localstack/README.md) — mock Secrets Manager, persistence + IAM enforcement (gói Student), script seed
 
 ## Bug/quirk đáng chú ý đã phát hiện qua thực nghiệm
 
@@ -111,9 +111,14 @@ nằm trong README của app tương ứng:
 - **`langflow-runtime`**: crash-loop nếu thiếu `LANGFLOW_SUPERUSER_PASSWORD`
   dù chạy `--backend-only` — app tự bắt buộc setup superuser, không phải
   giới hạn của chart.
-- **LocalStack Community**: `PERSISTENCE=1` không đủ — persistence là tính
-  năng trả phí (cần `LOCALSTACK_AUTH_TOKEN`), container restart là mất sạch
-  secret. Có script `localstack/seed-secrets.sh` seed lại (idempotent).
+- **LocalStack**: `PERSISTENCE=1`/`ENFORCE_IAM=1` cần đúng cả token LẪN
+  version image mới đủ — pin `4.13.1` (bản né token) dù set
+  `LOCALSTACK_AUTH_TOKEN` thật (gói Student) vẫn không kích hoạt được gì
+  (build quá cũ, chưa tích hợp license flow cho tier này). Đổi sang
+  `2026.7.5` mới thấy log `licensingv2 ... activated ...:student` — từ đó cả
+  2 tính năng hoạt động thật (đã tự test: secret sống qua restart, role gắn
+  policy Deny bị chặn đúng `AccessDeniedException`). Có script
+  `localstack/seed-secrets.sh` để seed lần đầu/phục hồi.
 - **`argocd-repo-server`**: git clone cache (`emptyDir`) sống theo pod chứ
   không theo container — nhiều lần container tự restart (do máy có hiện
   tượng gián đoạn hệ thống, chưa rõ nguyên nhân gốc) mà không xoá được cache

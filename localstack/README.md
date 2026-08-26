@@ -110,20 +110,43 @@ repo, chạy trên chính máy host này, dùng chung hostname này (xem
 `mirai-eks` bị `k3d cluster delete` + `create` lại (gateway IP của docker
 network có thể đổi giữa các lần tạo).
 
-## Persistence KHÔNG hoạt động ở bản Community
+## Persistence + IAM Policy Enforcement — ĐÃ hoạt động, cần đúng version image
 
-`PERSISTENCE=1` + mount volume (`./volume:/var/lib/localstack`) tưởng là đủ
-nhưng **không** — persistence là tính năng trả phí, cần
-`LOCALSTACK_AUTH_TOKEN` (gói Base/Ultimate) mới thật sự ghi state ra đĩa, kể
-cả trên tag `4.13.1` đã pin để né token cho service community (confirm qua
-docs chính thức của LocalStack — không phải đoán; `volume/state/` rỗng dù
-đã tạo secret từ trước). Container `localstack` restart (kể cả do máy/docker
-daemon restart ngoài ý muốn, đã gặp nhiều lần trong lúc dựng LiteLLM) là mất
-sạch secret.
+Trước đây pin `localstack/localstack:4.13.1` để chạy hoàn toàn không cần
+token (né license cho service community). Đã đăng ký
+[LocalStack for Students](https://www.localstack.cloud/localstack-for-students)
+(free qua GitHub Education) và có `LOCALSTACK_AUTH_TOKEN` thật — nhưng lần
+đầu set token vào bản `4.13.1` cũ, `PERSISTENCE=1`/`ENFORCE_IAM=1` **vẫn
+không chạy** (tạo secret, restart, secret mất; role gắn policy Deny tường
+minh vẫn gọi được `secretsmanager` bình thường). Kết luận sai lúc đó: tưởng
+gói Student không đủ tier.
 
-Script [`seed-secrets.sh`](seed-secrets.sh) tạo lại (idempotent — create nếu
-chưa có, update nếu đã có) toàn bộ secret biết trước. Chạy sau MỖI lần
-`docker compose up` container localstack:
+**Nguyên nhân thật:** `4.13.1` quá cũ, chưa tích hợp license flow cho tier
+Student (log khởi động không hề có dòng `licensingv2 ... activated`) — token
+bị đọc nhưng không kích hoạt được gì. Đổi sang
+`localstack/localstack:2026.7.5` (bản đã tự pull + test license flow thật:
+log có `Successfully requested and activated new license ...:student 🔑✅`)
+— test lại từ đầu, cả 2 đều hoạt động đúng:
+
+- **Persistence**: tạo secret → `docker restart mirai-localstack` → secret
+  còn nguyên (test trên chính container production, không phải bản cách ly).
+- **IAM Policy Enforcement**: role gắn policy `Deny secretsmanager:*` tường
+  minh, gọi `secretsmanager` bằng credential từ `sts assume-role` → nhận
+  đúng `AccessDeniedException`, giống hệt AWS thật.
+
+`docker-compose.yml` giờ set `SERVICES=secretsmanager,iam,sts`,
+`ENFORCE_IAM=1`, image `2026.7.5`. `LOCALSTACK_AUTH_TOKEN` đọc từ
+`localstack/.env` (KHÔNG commit — xem `.gitignore`); copy từ
+`.env.example` rồi điền token thật.
+
+Bài học: khi 1 tính năng "không hoạt động" dù đã có token đúng gói, kiểm tra
+lại **version image** trước khi kết luận do giới hạn license — feature có
+thể chưa được build đó tích hợp, không liên quan gì đến tier.
+
+Script [`seed-secrets.sh`](seed-secrets.sh) vẫn giữ để seed lần đầu / phục
+hồi nếu volume bị xoá tay — với persistence hoạt động thật, không còn cần
+chạy lại sau MỖI lần `docker compose up` nữa, nhưng chạy lại cũng vô hại
+(idempotent — create nếu chưa có, update nếu đã có):
 
 ```bash
 ./localstack/seed-secrets.sh
