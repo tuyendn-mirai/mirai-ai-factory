@@ -48,10 +48,14 @@ seed_secret "mirai/litellm" "Credentials cho LiteLLM (layer3)" '{
 
 # Langfuse: đã deploy (infra/apps/langfuse/), field bên dưới khớp đúng
 # ExternalSecret ở đó (xem infra/apps/langfuse/external-secret.yaml).
+#
+# ĐÃ BỎ DB_USERNAME/CLICKHOUSE_USER — không phải secret, ExternalSecret ở
+# đó không trích field nào tên vậy cả (username đặt thẳng literal trong
+# infra/apps/langfuse/values.yaml: postgresql.auth.username,
+# clickhouse.auth.username — giữ trong LocalStack chỉ để đó, không app nào
+# đọc, dễ hiểu lầm là đang đi qua ESO trong khi thực ra không).
 seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
-  "DB_USERNAME": "mirai",
   "DB_PASSWORD": "Adgjmptw1",
-  "CLICKHOUSE_USER": "mirai",
   "CLICKHOUSE_PASSWORD": "Adgjmptw1",
   "REDIS_PASSWORD": "Adgjmptw1",
   "MINIO_ROOT_USER": "langfuse",
@@ -69,16 +73,17 @@ seed_secret "mirai/langfuse" "Credentials cho Langfuse (self-host)" '{
 # host/port/user/password/database, hỗ trợ secretKeyRef). LANGFLOW_DATABASE_URL
 # (chuỗi đầy đủ) dùng cho langflow-runtime — chart đó chỉ có field `env` phẳng
 # (mỗi entry 1 value/secretKeyRef trọn vẹn, không có host/port/user rời để
-# ghép), nên phải bundle sẵn cả URL. LANGFLOW_SECRET_KEY mới generate (chưa
-# có trong .env — Fernet-style key mã hoá credential lưu trong flow, generate
-# bằng: python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())").
+# ghép), nên phải bundle sẵn cả URL.
+#
+# ĐÃ BỎ LANGFLOW_SUPERUSER/LANGFLOW_SUPERUSER_PASSWORD/DB_USERNAME/
+# LANGFLOW_SECRET_KEY — cả langflow-ide lẫn langflow-runtime đều set 4 giá
+# trị này bằng literal thẳng trong values.yaml (superuserPassword/secretKey
+# của langflow-ide chỉ nhận value, KHÔNG hỗ trợ secretKeyRef — xem
+# infra/apps/langflow-ide/README.md), không ExternalSecret nào trích các
+# field này cả. Giữ trong LocalStack chỉ gây hiểu lầm là đang đi qua ESO.
 seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4) — IDE + Runtime" '{
-  "LANGFLOW_SUPERUSER": "admin",
-  "LANGFLOW_SUPERUSER_PASSWORD": "Adgjmptw1",
-  "DB_USERNAME": "mirai",
   "DB_PASSWORD": "Adgjmptw1",
-  "LANGFLOW_DATABASE_URL": "postgresql://mirai:Adgjmptw1@host.k3d.internal:5435/langflow",
-  "LANGFLOW_SECRET_KEY": "_amV3KBbYmcoDhncCu0fMzovj6KsyLVwkHWfN9LF0L4="
+  "LANGFLOW_DATABASE_URL": "postgresql://mirai:Adgjmptw1@host.k3d.internal:5435/langflow"
 }'
 
 echo
