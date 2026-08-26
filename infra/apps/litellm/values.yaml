@@ -122,6 +122,15 @@ proxy_config:
         hinh_thuc_trien_khai: on-premise
         status: active
 
+    - model_name: embeddinggemma:300m
+      litellm_params:
+        model: ollama/embeddinggemma:300m
+        api_base: "http://host.k3d.internal:11434"
+      model_info:
+        nguon_cung: ollama-local
+        hinh_thuc_trien_khai: on-premise
+        status: active
+
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
 
