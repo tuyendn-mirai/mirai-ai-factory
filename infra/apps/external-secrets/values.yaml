@@ -243,8 +243,14 @@ rbac:
 # clustersecretstore.yaml trong cùng thư mục). host.k3d.internal là hostname
 # k3d tự tạo trỏ về gateway của host, dùng để pod trong cluster gọi ra
 # LocalStack chạy ngoài (docker-compose) — xem ../../../localstack/README.md.
+#
+# AWS_STS_ENDPOINT: cần riêng vì auth.jwt (ClusterSecretStore "localstack")
+# gọi AssumeRoleWithWebIdentity qua STS, KHÔNG dùng chung endpoint override
+# với SecretsManager — thiếu biến này request STS sẽ bay ra AWS thật.
 extraEnv:
   - name: AWS_SECRETSMANAGER_ENDPOINT
+    value: "http://host.k3d.internal:4566"
+  - name: AWS_STS_ENDPOINT
     value: "http://host.k3d.internal:4566"
 
 ## -- Map of extra arguments to pass to container.
