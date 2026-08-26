@@ -75,6 +75,22 @@ env:
     value: "http://litellm.litellm.svc.cluster.local:4000"
   - name: LANGFLOW_SSRF_ALLOWED_HOSTS
     value: "litellm.litellm.svc.cluster.local,langfuse-web.langfuse.svc.cluster.local"
+  # Langflow app TỰ bắt buộc setup_superuser lúc khởi động dù chạy
+  # --backend-only (không phải giới hạn của chart này) — thiếu
+  # LANGFLOW_SUPERUSER_PASSWORD sẽ crash-loop với "Username and password
+  # must be set". Dùng ĐÚNG giá trị với langflow-ide (xem
+  # infra/apps/langflow-ide/values.yaml) vì chung 1 DB/user table — setup
+  # idempotent, tìm thấy superuser đã có sẵn thay vì tạo trùng.
+  - name: LANGFLOW_AUTO_LOGIN
+    value: "false"
+  - name: LANGFLOW_SUPERUSER
+    value: "admin"
+  - name: LANGFLOW_SUPERUSER_PASSWORD
+    value: "Adgjmptw1"
+  - name: LANGFLOW_SECRET_KEY
+    value: "_amV3KBbYmcoDhncCu0fMzovj6KsyLVwkHWfN9LF0L4="
+  - name: LANGFLOW_NEW_USER_IS_ACTIVE
+    value: "false"
 
 
 service:
