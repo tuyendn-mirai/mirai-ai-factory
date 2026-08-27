@@ -78,3 +78,4 @@ vẫn là file thủ công — xem [`../argocd/argocd-ingress.yaml`](../argocd/a
 - [`langfuse/`](langfuse/README.md) — LLM observability
 - [`langflow-ide/`](langflow-ide/README.md) — Tầng 4, build/test flow (UI + API)
 - [`langflow-runtime/`](langflow-runtime/README.md) — Tầng 4, chạy flow đã build (headless)
+- [`mirai-hub/`](mirai-hub/README.md) — Tầng 5, Hub UI (Chainlit, không phải Helm chart — xem README riêng)

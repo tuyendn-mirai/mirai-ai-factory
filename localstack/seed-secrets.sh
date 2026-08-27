@@ -86,6 +86,29 @@ seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4) — IDE + Runt
   "LANGFLOW_DATABASE_URL": "postgresql://mirai:Adgjmptw1@host.k3d.internal:5435/langflow"
 }'
 
+# mirai-hub (Tầng 5): DB dùng CHUNG "ai_factory" với litellm/langfuse, tách
+# bằng schema "miraihub" (đã tạo sẵn + chạy schema.sql của Chainlit vào đó
+# — xem infra/apps/mirai-hub/README.md) thay vì DB riêng như langflow. Không
+# dùng trick "?schema=" trong URL như langfuse (Prisma-specific, asyncpg
+# không hiểu) — DATABASE_SCHEMA tách riêng, app tự truyền qua
+# connect_args.server_settings.search_path (mirai_hub/data_layer.py).
+#
+# CHƯA seed LANGFLOW_API_KEY/DEV_ANALYST_PASSWORD — chưa rõ langflow-runtime
+# có bắt buộc API key không (chưa test, xem mirai-hub/README.md checklist),
+# và DEV_ANALYST_PASSWORD có default cứng trong code (mirai_hub/auth.py) nên
+# không seed cũng chạy được (giá trị "admin" ở dưới cũng trùng default cứng
+# đó — seed ở đây chỉ để quản lý tập trung qua secret thay vì phụ thuộc
+# fallback trong code). external-secret.yaml CHỈ khai đúng field đã seed ở
+# đây — thêm field nào thì phải thêm cả ở đó (thiếu 1 property trong
+# LocalStack làm ExternalSecret lỗi SecretSyncedError cho cả object, không
+# phải lỗi cục bộ).
+seed_secret "mirai/mirai-hub" "Credentials cho Mirai Hub (Tầng 5)" '{
+  "CHAINLIT_AUTH_SECRET": "77ptErei0?^?X-HS5WCqM=G^2HHO8eU_.v9jM5QYueg%_*L_@I66>XrA_lu~jl~:",
+  "DATABASE_URL": "postgresql+asyncpg://mirai:Adgjmptw1@host.k3d.internal:5435/ai_factory",
+  "DATABASE_SCHEMA": "miraihub",
+  "DEV_ADMIN_PASSWORD": "admin"
+}'
+
 echo
 echo "Nếu ExternalSecret trong cluster đã sync trước đó (Secret k8s vẫn còn cache"
 echo "giá trị cũ), force sync lại bằng:"

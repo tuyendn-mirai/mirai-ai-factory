@@ -147,7 +147,7 @@ lực:
 | cert-manager | Chưa dùng — mọi ingress hiện là HTTP thuần nội bộ |
 | Keycloak | Chưa deploy |
 | Argo CD app-of-apps | Đã có (`infra/apps/root-application.yaml`) — nhưng chỉ quản lý object `Application`, không quản lý manifest thường (`ExternalSecret`, `ClusterSecretStore`, `argocd-ingress.yaml`), xem TODO |
-| Build & push Hub Web App / BFF | Chưa làm — ngoài phạm vi các bước đã thực hiện |
+| Build & push Hub Web App / BFF | Code xong ([`mirai-hub/`](mirai-hub/README.md), Chainlit thay vì Next.js), image build + `k3d image import` thật (không dùng registry), secret đã seed, manifest ArgoCD đã có ([`infra/apps/mirai-hub/`](infra/apps/mirai-hub/README.md)) và đã `kubectl apply` — nhưng CHƯA `Synced` vì chưa `git push` (ArgoCD pull từ remote, không phải working tree local) |
 | LiteLLM/Langflow/Langfuse chạy docker-compose song song k8s | docker-compose ở gốc repo đã bị xoá, k8s là bản DUY NHẤT còn chạy |
 
 ## Việc còn treo

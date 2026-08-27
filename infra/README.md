@@ -49,7 +49,8 @@ infra/
     ├── litellm/
     ├── langfuse/
     ├── langflow-ide/
-    └── langflow-runtime/
+    ├── langflow-runtime/
+    └── mirai-hub/       # Tầng 5, KHÔNG phải Helm chart — xem README riêng
 ```
 
 Xem README trong từng thư mục con để biết chi tiết cách dựng.
@@ -103,6 +104,14 @@ Xem README trong từng thư mục con để biết chi tiết cách dựng.
       `infra/apps/external-secrets/clustersecretstore.yaml`,
       `infra/apps/litellm/external-secret.yaml`,
       `infra/apps/langfuse/external-secret.yaml`,
-      `infra/apps/langflow-ide/external-secret.yaml`) — cần thêm làm source
+      `infra/apps/langflow-ide/external-secret.yaml`,
+      `infra/apps/mirai-hub/external-secret.yaml`) — cần thêm làm source
       thứ 3 (kiểu `directory`) trong multi-source Application của từng app
       thay vì `kubectl apply` thủ công
+- [ ] Deploy `mirai-hub` (Tầng 5) thật — manifest đã có
+      ([`apps/mirai-hub/`](apps/mirai-hub/README.md)) và pass server-side
+      dry-run, nhưng chưa `Synced`/`Healthy`: chưa có registry local để
+      build/push image, chưa seed secret `mirai/mirai-hub` trong LocalStack.
+      Xem checklist đầy đủ trong
+      [`../mirai-hub/README.md`](../mirai-hub/README.md) (còn phụ thuộc
+      Registry API thật ở Langflow + Keycloak deploy).
