@@ -1,0 +1,24 @@
+[
+  {
+    "id": "fp-cashflow-forecaster",
+    "name": "Cashflow Forecaster",
+    "domain": "AI-FP",
+    "description": "Forecasts short-term cashflow from transaction history and flags shortfall risk.",
+    "version": "0.1.0",
+    "owner": "platform-team",
+    "flow_id": "REPLACE_WITH_REAL_LANGFLOW_FLOW_ID",
+    "allowed_roles": ["admin", "analyst"],
+    "allowed_tenants": []
+  },
+  {
+    "id": "cr-kyc-summarizer",
+    "name": "KYC Document Summarizer",
+    "domain": "AI-CR",
+    "description": "Extracts and summarizes key fields from KYC documents for reviewer sign-off.",
+    "version": "0.1.0",
+    "owner": "platform-team",
+    "flow_id": "REPLACE_WITH_REAL_LANGFLOW_FLOW_ID",
+    "allowed_roles": ["admin", "reviewer"],
+    "allowed_tenants": []
+  }
+]
