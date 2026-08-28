@@ -16,65 +16,60 @@ infra/apps/mirai-hub/
     └── ingress.yaml
 ```
 
-## Trạng thái hiện tại: chỉ còn thiếu `git push`
+## Rebuild (Aug 2026): bỏ agent catalog, chat trực tiếp qua LiteLLM + MCP
 
-Đã làm thật + verify (không phải giả định):
+Bản trước forward tin nhắn sang 1 flow Langflow cố định chọn qua
+`chat_profiles` lọc theo role/tenant (seed JSON tĩnh). Bản này bỏ hẳn catalog
+đó — mirai-hub giờ tự chạy 1 tool-calling loop (gọi LiteLLM/Tầng 3 trực
+tiếp), và mỗi thread có thể kết nối tới **1 MCP server** lấy động từ danh
+sách project của Langflow (Tầng 4) qua panel Settings — không seed bằng
+JSON. Chi tiết thiết kế + lý do từng quyết định nằm trong
+[`../../../mirai-hub/README.md`](../../../mirai-hub/README.md) và comment
+trực tiếp trong code (`mirai_hub/mcp_client.py`, `mirai_hub/chat.py`,
+`.chainlit/config.toml`).
 
-- **Image**: build từ `../../../mirai-hub/Dockerfile` (`docker build -t
-  mirai-hub:latest .`), import thẳng vào containerd cụm `mirai-eks` bằng
-  `k3d image import mirai-hub:latest -c mirai-eks` — **không dùng registry**
-  (đã bỏ hướng "registry local" trong README gốc, không cần cho local
-  mimic). `deployment.yaml` dùng `image: mirai-hub:latest` +
-  `imagePullPolicy: IfNotPresent` (bắt buộc, không thì kubelet cố pull từ
-  Docker Hub và fail).
-- **Secret `mirai/mirai-hub` đã seed thật** trong LocalStack (4 field:
-  `CHAINLIT_AUTH_SECRET`, `DATABASE_URL`, `DATABASE_SCHEMA`,
-  `DEV_ADMIN_PASSWORD`) — xem
-  [`../../../localstack/seed-secrets.sh`](../../../localstack/seed-secrets.sh).
-  `LANGFLOW_API_KEY`/`DEV_ANALYST_PASSWORD` CHƯA seed
-  (xem comment trong file đó) — `deployment.yaml` đọc các field này qua
-  `optional: true` nên không chặn.
-- **Schema `miraihub` trong DB `ai_factory`** đã có sẵn (owner `mirai`,
-  giống litellm/langfuse) — đã chạy thật schema.sql của Chainlit
-  (`users`/`threads`/`steps`/`elements`/`feedbacks`) vào đúng schema này qua
-  `docker exec mirai-dev-postgres psql`, verify bằng `\dt miraihub.*`.
-- **`kubectl apply -f infra/apps/mirai-hub/application.yaml`** đã chạy thật
-  — Application tồn tại trong `argocd` namespace, nhưng
-  `ComparisonError: infra/apps/mirai-hub/manifests: app path does not
-  exist` — vì ArgoCD pull từ git **remote** (`main`), không phải working
-  tree local. **Việc còn lại duy nhất: commit + push** (xem
-  [`../README.md`](../README.md) — "chỉ cần commit + push, ArgoCD tự thấy
-  file mới").
+Vẫn dùng chung Postgres `ai_factory` (schema `miraihub`, xem
+[`../../../mirai-hub/scripts/init_schema.py`](../../../mirai-hub/scripts/init_schema.py)
+— DDL chính thức từ `chainlit-datalayer`, không phải tự viết), giờ có thêm
+S3-compatible storage (MinIO) cho file element, và Postgres/S3 credentials
+seed trong `mirai/mirai-hub` (xem
+[`../../../localstack/seed-secrets.sh`](../../../localstack/seed-secrets.sh)).
 
 ## Áp dụng
 
 ```bash
-# 1. Commit + push — ArgoCD chỉ thấy file qua git remote, không phải local
-#    working tree (đã tự xác nhận bằng ComparisonError thật).
+# 1. (Đã làm 1 lần) schema Postgres — xem mirai-hub/scripts/init_schema.py
+# 2. (Cần làm tay, ngoài repo) tạo user/bucket MinIO thật khớp secret đã
+#    seed — mirai-dev-minio không do repo này quản lý, xem
+#    mirai-hub/README.md phần MinIO.
+# 3. Build + import image (không dùng registry, xem Dockerfile)
+cd mirai-hub && docker build -t mirai-hub:latest . && k3d image import mirai-hub:latest -c mirai-eks
+
+# 4. Commit + push — ArgoCD chỉ thấy file qua git remote, không phải local
+#    working tree.
 git add infra/apps/mirai-hub mirai-hub localstack/seed-secrets.sh
 git commit -m "..." && git push
 
-# 2. Application đã apply sẵn (kubectl apply -f infra/apps/mirai-hub/application.yaml
-#    đã chạy) — sau khi push, ArgoCD tự sync (automated + selfHeal), không
-#    cần làm gì thêm cho bước này.
-
-# 3. External secret — CHƯA áp dụng, cần namespace mirai-hub tồn tại trước
-#    (ArgoCD tự tạo qua CreateNamespace=true sau khi sync xong ở bước 2)
+# 5. External secret — cần namespace mirai-hub tồn tại trước (ArgoCD tự tạo
+#    qua CreateNamespace=true sau khi Application sync xong ở bước 4)
 kubectl apply -f infra/apps/mirai-hub/external-secret.yaml
 ```
 
 ## Quyết định thiết kế đáng chú ý
 
-- **`LANGFLOW_RUNTIME_BASE_URL` hard-code service DNS nội bộ**
-  (`http://langflow-runtime.langflow.svc.cluster.local:7860`), không qua
-  Ingress/`*.mirai.local` — Layer 5 gọi Layer 4 trong-cluster, không cần đi
-  vòng qua ingress-nginx như truy cập từ trình duyệt.
-- **4 field `OAUTH_KEYCLOAK_*` không có trong `external-secret.yaml`** —
-  xem comment trong chính file đó: property chưa tồn tại ở LocalStack (chưa
-  seed vì Keycloak chưa deploy) sẽ làm lỗi `SecretSyncedError` cho *cả*
-  object, không phải lỗi cục bộ từng field. `deployment.yaml` đã đọc 4 field
-  này qua `secretKeyRef.optional: true` nên khi thêm vào ExternalSecret sau
-  này không cần sửa gì ở Deployment.
+- **`features.mcp.enabled = false` trong `config.toml` là cố ý** — MCP native
+  của Chainlit (icon 🔌) quản lý connection theo browser-session, không theo
+  thread, và không có API phía server để mở connection thay người dùng. App
+  tự nói chuyện MCP (SDK `mcp` chính thức) driven bởi panel Settings, cho
+  phép bind đúng 1 server / thread + tự reconnect khi resume thread. Xem
+  comment đầy đủ trong `.chainlit/config.toml` và `mirai_hub/mcp_client.py`.
+- **`LANGFLOW_RUNTIME_BASE_URL` hard-code service DNS nội bộ** — Layer 5 gọi
+  Layer 4 trong-cluster (list project + composer-url + kết nối MCP), không
+  qua Ingress.
+- **`LITELLM_BASE_URL` không phải secret** (chỉ service DNS), nhưng
+  `LITELLM_API_KEY` dùng lại masterkey plaintext của `litellm-helm` — chấp
+  nhận rủi ro POC local giống các app khác trong repo này, không mint virtual
+  key riêng.
 - **Ingress host `hub.mirai.local`** — cần thêm dòng `127.0.0.1 hub.mirai.local`
   vào `/etc/hosts` (máy chạy trình duyệt) như mọi app khác, xem lưu ý SSH
   remote trong [`../../argocd/README.md`](../../argocd/README.md).

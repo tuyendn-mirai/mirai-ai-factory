@@ -1,5 +1,5 @@
-# Mirai Hub — Layer 5
+# Mirai Hub
 
-Catalog các agent đã publish ở Layer 4 (Agent & Workflow Factory). Chọn 1 agent ở
-góc trên để bắt đầu — mọi suy luận/tool-calling đã đóng gói sẵn trong flow, ở
-đây chỉ chuyển tiếp tin nhắn qua lại.
+Trợ lý chat của nền tảng Mirai AI Factory. Đăng nhập để bắt đầu — mở panel
+**Settings** (biểu tượng ⚙ ở sidebar) để kết nối một MCP server (từ Langflow)
+cho cuộc hội thoại hiện tại nếu cần thêm công cụ.

@@ -87,18 +87,24 @@ seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4) — IDE + Runt
 }'
 
 # mirai-hub (Tầng 5): DB dùng CHUNG "ai_factory" với litellm/langfuse, tách
-# bằng schema "miraihub" (đã tạo sẵn + chạy schema.sql của Chainlit vào đó
-# — xem infra/apps/mirai-hub/README.md) thay vì DB riêng như langflow. Không
-# dùng trick "?schema=" trong URL như langfuse (Prisma-specific, asyncpg
-# không hiểu) — DATABASE_SCHEMA tách riêng, app tự truyền qua
-# connect_args.server_settings.search_path (mirai_hub/data_layer.py).
+# bằng schema "miraihub" (dùng scripts/init_schema.py để (re)tạo — DDL chính
+# thức từ github.com/Chainlit/chainlit-datalayer, không phải tự viết) thay vì
+# DB riêng như langflow. Không dùng trick "?schema=" trong URL như langfuse
+# (Prisma-specific, asyncpg không hiểu) — DATABASE_SCHEMA tách riêng, app tự
+# truyền qua connect_args.server_settings.search_path (mirai_hub/data_layer.py).
 #
-# CHƯA seed LANGFLOW_API_KEY/DEV_ANALYST_PASSWORD — chưa rõ langflow-runtime
-# có bắt buộc API key không (chưa test, xem mirai-hub/README.md checklist),
-# và DEV_ANALYST_PASSWORD có default cứng trong code (mirai_hub/auth.py) nên
-# không seed cũng chạy được (giá trị "admin" ở dưới cũng trùng default cứng
-# đó — seed ở đây chỉ để quản lý tập trung qua secret thay vì phụ thuộc
-# fallback trong code). external-secret.yaml CHỈ khai đúng field đã seed ở
+# Rebuild (Aug 2026): app giờ tự chạy tool-calling loop qua LiteLLM (Tầng 3)
+# thay vì chỉ forward sang 1 flow Langflow cố định — LITELLM_API_KEY thêm
+# mới, dùng LẠI masterkey plaintext của litellm-helm (xem
+# infra/apps/litellm/values.yaml, field masterkey — rủi ro plaintext đã được
+# chấp nhận cho POC local ở đó, seed lại ở đây thay vì mint virtual key riêng
+# cho đơn giản). APP_AWS_REGION thêm mới — boto3 bắt buộc dù chạy với MinIO
+# (giá trị không cần đúng nghĩa AWS region thật). LANGFLOW_API_KEY giờ dùng
+# thật cho mirai_hub/langflow_client.py (header x-api-key khi liệt kê
+# project/lấy composer-url cho màn hình chọn MCP server) — không còn là
+# optional/chưa test như bản cũ. Đã bỏ DEV_ANALYST_PASSWORD — app mới không
+# còn khái niệm nhiều user/role (agent catalog theo role/tenant đã bỏ, xem
+# mirai-hub/README.md). external-secret.yaml CHỈ khai đúng field đã seed ở
 # đây — thêm field nào thì phải thêm cả ở đó (thiếu 1 property trong
 # LocalStack làm ExternalSecret lỗi SecretSyncedError cho cả object, không
 # phải lỗi cục bộ).
@@ -106,7 +112,14 @@ seed_secret "mirai/mirai-hub" "Credentials cho Mirai Hub (Tầng 5)" '{
   "CHAINLIT_AUTH_SECRET": "77ptErei0?^?X-HS5WCqM=G^2HHO8eU_.v9jM5QYueg%_*L_@I66>XrA_lu~jl~:",
   "DATABASE_URL": "postgresql+asyncpg://mirai:Adgjmptw1@host.k3d.internal:5435/ai_factory",
   "DATABASE_SCHEMA": "miraihub",
-  "DEV_ADMIN_PASSWORD": "admin"
+  "DEV_ADMIN_PASSWORD": "admin",
+  "LANGFLOW_API_KEY": "sk-sdG2abq2W4PZm-no1sU98fbp8qpaMzOT2btWgVaHHFc",
+  "BUCKET_NAME": "miraihub",
+  "APP_AWS_ACCESS_KEY": "mirahub",
+  "APP_AWS_SECRET_KEY": "Adgjmptw1",
+  "APP_AWS_REGION": "ap-northeast-1",
+  "DEV_AWS_ENDPOINT": "http://host.k3d.internal:9100",
+  "LITELLM_API_KEY": "Adgjmptw1"
 }'
 
 echo

@@ -1,25 +1,32 @@
 # Mirai Hub — Layer 5 (Hub UI)
 
-Vỏ chat cho platform: đọc Agent Catalog (Layer 4), lọc theo role/tenant, forward
-tin nhắn sang flow đã chọn ở `langflow-runtime`, stream kết quả về. Không có
-orchestration/tool-calling ở đây — "Cách 2 nghiêm ngặt": mọi suy luận đã đóng
-gói sẵn trong flow ở Layer 4, Layer 5 chỉ là catalog + auth + session + stream.
+Chat UI của platform, xây trên [Chainlit](https://docs.chainlit.io). Đăng
+nhập, chat trực tiếp với model qua LiteLLM (Tầng 3), và có thể kết nối **1
+MCP server / thread** lấy động từ danh sách project của Langflow (Tầng 4) để
+model gọi thêm tool trong lúc trả lời.
 
-Xây trên [Chainlit](https://docs.chainlit.io) — chọn vì có sẵn `KeycloakOAuthProvider`,
-data layer SQLAlchemy (Postgres), streaming, và `set_chat_profiles` (đúng nhu
-cầu catalog lọc theo user) mà không kèm theo bất kỳ tool/agent framework nào
-phải tự gỡ bỏ.
+Khác bản trước (không còn "agent catalog" chọn theo role/tenant rồi forward
+nguyên văn sang 1 flow Langflow cố định) — xem
+[`../infra/apps/mirai-hub/README.md`](../infra/apps/mirai-hub/README.md)
+mục "Rebuild" để biết lý do.
 
 ## Cấu trúc
 
 ```
-app.py                  # entrypoint Chainlit — set_chat_profiles/on_chat_start/on_message
+app.py                     # entrypoint Chainlit — mọi @cl.on_*/@cl.set_* nằm ở đây
 mirai_hub/
-  auth.py                # password login (dev) + Keycloak oauth_callback (khi có env)
-  catalog.py              # đọc catalog agent — v1: seed JSON tĩnh
-  data_layer.py            # đăng ký Postgres data layer nếu có DATABASE_URL
-  langflow_client.py        # gọi + stream từ langflow-runtime (Layer 4)
-  data/agents_seed.json      # seed catalog v1
+  settings.py                # pydantic-settings — 1 nguồn duy nhất đọc env, fail-fast nếu thiếu biến bắt buộc
+  auth.py                     # password login (1 user dev: admin / DEV_ADMIN_PASSWORD)
+  data_layer.py                # official data layer: SQLAlchemyDataLayer + S3StorageClient, schema-scoped
+  llm_client.py                 # AsyncOpenAI trỏ vào LiteLLM (Tầng 3)
+  langflow_client.py             # list project + composer-url từ Langflow (Tầng 4), cho panel Settings
+  mcp_client.py                   # client MCP tự quản (SDK `mcp` chính thức) — xem comment trong file, có bug
+                                    # concurrency (anyio task group) đã né bằng background task pattern
+  chat.py                          # tool-calling loop cho on_message
+scripts/
+  init_schema.py                    # (re)tạo schema Postgres `miraihub` — DDL chính thức từ chainlit-datalayer
+public/
+  favicon.png, logo_light.png, logo_dark.png, theme.json   # brand Mirai (navy #052362)
 ```
 
 ## Chạy local
@@ -28,12 +35,51 @@ mirai_hub/
 uv sync
 cp .env.example .env
 uv run chainlit create-secret   # dán kết quả vào CHAINLIT_AUTH_SECRET trong .env
+```
+
+`.env.example` đã trỏ sẵn `localhost` cho Postgres (`5435`)/MinIO (`9100`)/
+LiteLLM (`4000`)/langflow-runtime (`7860`) — đúng cho chạy trực tiếp trên máy
+dev này (khác `host.k3d.internal` dùng trong cluster). Cần
+`APP_AWS_SECRET_KEY`/`LITELLM_API_KEY`/`LANGFLOW_API_KEY` thật — lấy từ
+LocalStack (`aws --endpoint-url=http://localhost:4566 secretsmanager
+get-secret-value --secret-id mirai/mirai-hub`) hoặc file gốc
+[`../localstack/seed-secrets.sh`](../localstack/seed-secrets.sh).
+
+```bash
 uv run chainlit run app.py -w
 ```
 
-Đăng nhập bằng user dev (`admin`/`admin` hoặc `analyst`/`analyst`, đổi qua
-`DEV_ADMIN_PASSWORD`/`DEV_ANALYST_PASSWORD`) — chưa có Keycloak nên đây là
-đường duy nhất để vào app lúc này.
+Đăng nhập bằng `admin` / giá trị `DEV_ADMIN_PASSWORD` (mặc định `admin`).
+
+## Schema Postgres
+
+```bash
+uv run python scripts/init_schema.py "postgresql://mirai:PASSWORD@localhost:5435/ai_factory"
+```
+
+Drop + tạo lại schema `miraihub` mỗi lần chạy (idempotent, DDL lấy nguyên
+văn từ 2 migration chính thức của
+[`chainlit-datalayer`](https://github.com/Chainlit/chainlit-datalayer)) —
+**chỉ** đụng tới schema `miraihub`, không đụng `public` hay schema của
+litellm/langfuse trong cùng DB `ai_factory`.
+
+## MinIO (S3-compatible storage) — cần provision tay 1 lần
+
+Secret `mirai/mirai-hub` đã seed `BUCKET_NAME=miraihub` /
+`APP_AWS_ACCESS_KEY=mirahub` / `APP_AWS_SECRET_KEY` — nhưng đây là giá trị
+**mong muốn** cho user/bucket trên `mirai-dev-minio` (container ngoài repo
+này), không tự động tạo ra user/bucket đó. Nếu app báo lỗi upload file /
+`InvalidAccessKeyId`, chạy (cần root credentials của chính MinIO instance đó):
+
+```bash
+mc alias set local http://host.k3d.internal:9100 <ROOT_USER> <ROOT_PASSWORD>
+mc admin user add local mirahub Adgjmptw1
+mc mb local/miraihub
+mc admin policy create local miraihub-rw /dev/stdin <<'EOF'
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:*"],"Resource":["arn:aws:s3:::miraihub","arn:aws:s3:::miraihub/*"]}]}
+EOF
+mc admin policy attach local miraihub-rw --user mirahub
+```
 
 ## Đóng gói Docker
 
@@ -42,72 +88,22 @@ docker build -t mirai-hub .
 docker run --rm -p 8000:8000 --env-file .env mirai-hub
 ```
 
-(Đã build + chạy thử thật khi viết README này — image boot được, trả `HTTP 200`.)
-
 ## Checklist cần hoàn thiện
 
-Xếp theo thứ tự phụ thuộc — mỗi mục chặn mục dưới nó nếu bỏ qua:
-
-- [ ] **Registry API thật ở Layer 4** — `langflow-runtime` hiện chưa expose
-      API nào trả về domain/owner/version/eval/publish-state (xem
-      `infra/apps/langflow-runtime/README.md`, "chưa có flow nào để phục
-      vụ"). `mirai_hub/catalog.py` đang đọc từ
-      `mirai_hub/data/agents_seed.json` — thay `_load_seed()` bằng call HTTP
-      thật khi Layer 4 có API này, giữ nguyên interface
-      `list_agents()`/`list_agents_for_user()` cho phần còn lại không phải
-      sửa.
-- [ ] **Export flow thật + set `flow_id`** — 2 agent trong seed hiện có
-      `flow_id: "REPLACE_WITH_REAL_LANGFLOW_FLOW_ID"` (app tự chặn, báo lỗi
-      thân thiện thay vì gọi Langflow). Cần export flow từ `langflow-ide`,
-      trỏ `langflow-runtime`'s `downloadFlows.flows` vào đó (việc còn treo
-      ghi trong `infra/README.md`), rồi điền `flow_id` thật vào seed.
-- [ ] **Verify request/response shape thật của `langflow-runtime`** —
-      `mirai_hub/langflow_client.py` viết theo tài liệu công khai
-      (`docs.langflow.org/api-flows-run`: `POST /api/v1/run/{flow_id}?stream=true`,
-      SSE event `{"event": "token", "data": {"chunk": "..."}}`), **chưa test
-      với flow thật** vì runtime hiện rỗng. Có thể lệch giữa version Langflow
-      thật đang chạy (`langflow-runtime` chart) và tài liệu — chạy thử ngay
-      khi có flow đầu tiên, sửa lại field name nếu cần.
-- [ ] **Deploy Keycloak** — README gốc plan có Keycloak nhưng PLATFORM.md ghi
-      "chưa deploy". Chặn toàn bộ SSO thật — hiện chỉ có password login dev
-      (`mirai_hub/auth.py`), không dùng được cho production.
-- [ ] **Verify claim mapping Keycloak → role/tenant** — `oauth_callback`
-      trong `mirai_hub/auth.py` đang đoán field (`realm_access.roles`,
-      `tenant`) vì chưa có realm/client thật để soi token. Sau khi Keycloak
-      lên, decode 1 ID token thật rồi sửa lại mapping cho đúng.
-- [x] **Postgres cho `DATABASE_URL`** — dùng chung DB `ai_factory` với
-      litellm/langfuse (không phải DB riêng như langflow), tách bằng schema
-      `miraihub` qua `connect_args.server_settings.search_path`
-      (`mirai_hub/data_layer.py`) — **không** dùng trick `?schema=` trong
-      URL như langfuse (Prisma-specific, asyncpg không hiểu). Đã verify thật
-      bằng asyncpg trực tiếp (bảng tạo ra đúng nằm trong schema `miraihub`,
-      không rơi vào `public`) và đã chạy thật schema.sql của Chainlit
-      (`users`/`threads`/`steps`/`elements`/`feedbacks`) vào schema đó qua
-      `mirai-dev-postgres`.
-- [ ] **`allowed_roles`/`allowed_tenants` mới là placeholder** — seed catalog
-      dùng role đơn giản (`admin`/`analyst`/`reviewer`) và tenant giả
-      (`internal`) để có gì đó test lọc; cần đối chiếu với mô hình
-      role/tenant thật (theo domain AI-FP/AI-FM/AI-CR/AI-CFO trong `AI
-      Factory Architecture EN.html`) khi Layer 4 Registry + Keycloak có
-      thật.
-- [x] **Viết `infra/apps/mirai-hub/`** — plain manifest (không Helm, không
-      có chart chính thức cho app này) — `application.yaml` +
-      `manifests/{deployment,service,ingress}.yaml` + `external-secret.yaml`,
-      đã pass server-side dry-run thật trên cluster `mirai-eks`. Xem
-      [`../infra/apps/mirai-hub/README.md`](../infra/apps/mirai-hub/README.md).
-- [x] **Seed secret `mirai/mirai-hub`** — đã seed thật trong LocalStack
-      (`CHAINLIT_AUTH_SECRET`/`DATABASE_URL`/`DATABASE_SCHEMA`/`DEV_ADMIN_PASSWORD`), verify bằng
-      `aws secretsmanager get-secret-value`. Bỏ hẳn hướng "registry local"
-      (README gốc bước 8 có nhắc nhưng không cần cho local mimic) — build
-      `mirai-hub:latest` rồi `k3d image import -c mirai-eks` thẳng vào
-      containerd cụm, `deployment.yaml` đã set `imagePullPolicy:
-      IfNotPresent` cho đúng.
-- [ ] **`git push`** — đây là việc CHƯA làm và là việc còn lại duy nhất để
-      app thật sự lên: `kubectl apply -f infra/apps/mirai-hub/application.yaml`
-      đã chạy, nhưng ArgoCD báo `ComparisonError: ... app path does not
-      exist` vì nó pull từ git remote (`main`), không phải working tree
-      local — đã tự xác nhận lỗi này thật, không phải suy đoán. Xem
-      `infra/apps/mirai-hub/README.md`.
-- [ ] **Không có test tự động** — mọi verify ở trên (`uv run chainlit run`,
-      `docker build`/`docker run`) mới là smoke test thủ công lúc viết code
-      này, chưa có test suite.
+- [ ] **Provision user/bucket MinIO thật** (mục trên) — chưa làm tại thời
+      điểm viết README này (`InvalidAccessKeyId` khi test trực tiếp).
+- [x] **`LLM_MODEL` mặc định `gemma4:e4b` hỗ trợ tool-calling** — đã tự
+      verify thật (không phải suy đoán): gọi qua LiteLLM (`ollama/` cũ),
+      model luôn trả JSON tool-call dưới dạng text thường, không set
+      `tool_calls`; gọi trực tiếp `/api/chat` của Ollama (bỏ qua LiteLLM)
+      với cùng `tools=` thì model trả `tool_calls` đúng chuẩn ngay. Bug nằm
+      ở routing `ollama/` của LiteLLM (dùng `/api/generate` cũ, không dịch
+      được `tools=`) — đã sửa thành `ollama_chat/` trong
+      `infra/apps/litellm/values.yaml` (chưa deploy, xem mục dưới).
+- [ ] **Deploy: `git push` + rebuild image + `kubectl apply -f infra/apps/mirai-hub/external-secret.yaml`**
+      — code + manifest đã sẵn (kể cả fix `ollama_chat/` cho litellm ở
+      trên), chưa đẩy lên để ArgoCD sync (xem
+      [`../infra/apps/mirai-hub/README.md`](../infra/apps/mirai-hub/README.md)).
+- [ ] **Không có test tự động** — verify hiện tại là chạy `chainlit run`
+      + gọi `scripts/init_schema.py` thật lúc viết code này, chưa có test
+      suite.

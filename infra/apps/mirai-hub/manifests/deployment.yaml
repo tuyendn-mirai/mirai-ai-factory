@@ -26,80 +26,78 @@ spec:
             - name: http
               containerPort: 8000
           env:
-            # Layer 4 — service DNS nội bộ k8s (namespace "langflow", release
-            # "langflow-runtime", xem infra/apps/langflow-runtime/values.yaml).
-            - name: LANGFLOW_RUNTIME_BASE_URL
-              value: http://langflow-runtime.langflow.svc.cluster.local:7860
             - name: CHAINLIT_AUTH_SECRET
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
                   key: chainlit-auth-secret
-            # Chưa rõ langflow-runtime có bắt buộc API key không (chưa test
-            # với flow thật) — để optional, key này chưa tồn tại trong
-            # Secret (chưa seed, xem external-secret.yaml) nên optional:true
-            # là bắt buộc, không chỉ là phòng hờ.
-            - name: LANGFLOW_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: mirai-hub-credentials
-                  key: langflow-api-key
-                  optional: true
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: mirai-hub-credentials
-                  key: database-url
-            # Schema riêng trong DB "ai_factory" dùng chung với litellm/
-            # langfuse (xem mirai_hub/data_layer.py — search_path, không
-            # phải "?schema=" trong URL như langfuse dùng, asyncpg không
-            # hiểu trick đó).
-            - name: DATABASE_SCHEMA
-              valueFrom:
-                secretKeyRef:
-                  name: mirai-hub-credentials
-                  key: database-schema
-            # Có default cứng trong code (mirai_hub/auth.py) nên không seed
-            # cũng chạy được — optional:true, chưa có key này trong Secret.
             - name: DEV_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
                   key: dev-admin-password
-                  optional: true
-            - name: DEV_ANALYST_PASSWORD
+            # Official Chainlit data layer — Postgres. Schema riêng trong DB
+            # "ai_factory" dùng chung với litellm/langfuse (xem
+            # mirai_hub/data_layer.py — search_path, không phải "?schema="
+            # trong URL như langfuse dùng, asyncpg không hiểu trick đó).
+            - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
-                  key: dev-analyst-password
-                  optional: true
-            # OAuth Keycloak — để trống/không set 4 biến này thì app tự bỏ
-            # qua oauth_callback (xem mirai-hub/mirai_hub/auth.py), chỉ còn
-            # dev password login. Bật thật khi Keycloak lên (PLATFORM.md ghi
-            # "chưa deploy").
-            - name: OAUTH_KEYCLOAK_CLIENT_ID
+                  key: database-url
+            - name: DATABASE_SCHEMA
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
-                  key: oauth-keycloak-client-id
-                  optional: true
-            - name: OAUTH_KEYCLOAK_CLIENT_SECRET
+                  key: database-schema
+            # Official Chainlit data layer — S3-compatible storage (MinIO).
+            - name: BUCKET_NAME
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
-                  key: oauth-keycloak-client-secret
-                  optional: true
-            - name: OAUTH_KEYCLOAK_REALM
+                  key: bucket-name
+            - name: APP_AWS_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
-                  key: oauth-keycloak-realm
-                  optional: true
-            - name: OAUTH_KEYCLOAK_BASE_URL
+                  key: app-aws-access-key
+            - name: APP_AWS_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
-                  key: oauth-keycloak-base-url
+                  key: app-aws-secret-key
+            - name: APP_AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: mirai-hub-credentials
+                  key: app-aws-region
+            # Unset against real AWS — only meaningful for the local MinIO
+            # instance, so optional:true.
+            - name: DEV_AWS_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: mirai-hub-credentials
+                  key: dev-aws-endpoint
+                  optional: true
+            # Layer 3 — LiteLLM (OpenAI-compatible), the chat model backend
+            # for the tool-calling loop (mirai_hub/chat.py). Service DNS nội
+            # bộ k8s, không phải secret.
+            - name: LITELLM_BASE_URL
+              value: http://litellm.litellm.svc.cluster.local:4000
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mirai-hub-credentials
+                  key: litellm-api-key
+            # Layer 4 — langflow-runtime, service DNS nội bộ k8s. Nguồn cho
+            # màn hình chọn MCP server (mirai_hub/langflow_client.py).
+            - name: LANGFLOW_RUNTIME_BASE_URL
+              value: http://langflow-runtime.langflow.svc.cluster.local:7860
+            - name: LANGFLOW_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mirai-hub-credentials
+                  key: langflow-api-key
                   optional: true
           readinessProbe:
             httpGet:
