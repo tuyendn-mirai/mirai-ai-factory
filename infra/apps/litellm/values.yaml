@@ -104,9 +104,21 @@ masterkey: "Adgjmptw1"
 # một giá trị không nhạy cảm vào Secret chỉ để đi vòng qua giới hạn đó.
 proxy_config:
   model_list:
+    # `ollama_chat/` (không phải `ollama/`) — đã tự verify thật: `ollama/`
+    # route qua endpoint /api/generate cũ của Ollama, LiteLLM không dịch
+    # được `tools=` qua đó nên model trả JSON tool-call dưới dạng TEXT
+    # thường thay vì field `tool_calls` chuẩn OpenAI (test qua mirai-hub —
+    # model luôn stream ra content `{"name": ..., "arguments": ...}` dạng
+    # chuỗi, không bao giờ set tool_calls). Gọi trực tiếp
+    # /api/chat của chính Ollama (bỏ qua LiteLLM) với cùng payload +
+    # `tools=` thì model trả `tool_calls` đúng chuẩn ngay — bug nằm ở
+    # routing `ollama/` của LiteLLM, không phải ở model. `model_name` alias
+    # (cái caller thấy) không đổi, chỉ đổi endpoint Ollama nội bộ LiteLLM
+    # gọi — không ảnh hưởng caller nào đang dùng 2 model này mà chưa cần
+    # tool-calling.
     - model_name: gemma4:e4b
       litellm_params:
-        model: ollama/gemma4:e4b
+        model: ollama_chat/gemma4:e4b
         api_base: "http://host.k3d.internal:11434"
       model_info:
         nguon_cung: ollama-local
@@ -115,7 +127,7 @@ proxy_config:
 
     - model_name: gemma4:31b
       litellm_params:
-        model: ollama/gemma4:31b
+        model: ollama_chat/gemma4:31b
         api_base: "http://host.k3d.internal:11434"
       model_info:
         nguon_cung: ollama-local
