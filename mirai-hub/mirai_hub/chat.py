@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 async def handle_user_message(message: cl.Message) -> None:
     binding: McpBinding | None = cl.user_session.get("mcp_binding")
     tools = binding.tools_openai if binding and binding.tools_openai else None
+    model = cl.user_session.get("llm_model", settings.llm_model)
     history = cl.chat_context.to_openai()
 
     reply = cl.Message(content="")
@@ -30,7 +31,7 @@ async def handle_user_message(message: cl.Message) -> None:
     try:
         for round_no in range(settings.max_tool_roundtrips + 1):
             stream = await llm_client.get_client().chat.completions.create(
-                model=settings.llm_model,
+                model=model,
                 messages=history,
                 tools=tools,
                 stream=True,

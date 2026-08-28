@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Layer 3 — LiteLLM (OpenAI-compatible), the chat model backend
     litellm_base_url: str = "http://litellm.litellm.svc.cluster.local:4000"
     litellm_api_key: str
-    llm_model: str = "gemma4:e4b"
+    llm_model: str = "gemma4:e4b"  # default selection + fallback if /v1/models can't be reached
     max_tool_roundtrips: int = 4
 
     # Layer 4 — langflow-runtime, source of the MCP server picker
