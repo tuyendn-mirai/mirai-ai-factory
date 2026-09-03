@@ -1,9 +1,13 @@
 replicaCount: 1
 
+# Ghim tag "1.12.0" (khớp langflow-ide/values.yaml) — KHÔNG dùng "latest",
+# xem comment ở đó: "latest" từng gây crash-loop khi pod restart tự kéo
+# bản mới hơn (migration Postgres không khớp, rồi ImportError
+# "KBKeyDecryptError" trong component Knowledge của flow "Document Q&A").
 image:
   repository: "langflowai/langflow"
   pullPolicy: Always
-  tag: latest
+  tag: "1.12.0"
 
 downloadFlows:
   path: /app/flows

@@ -50,10 +50,17 @@ podSecurityContext:
   runAsGroup: 1000
 
 
+# Ghim tag "1.12.0" (khớp /api/v1/version đang chạy) — KHÔNG dùng "latest".
+# "latest" từng gây crash-loop 2 lần liên tiếp khi pod restart tự kéo bản
+# mới hơn: (1) migration catalog_policy_rule check constraint không khớp
+# schema Postgres cũ, (2) flow "Document Q&A" (component Knowledge) lỗi
+# ImportError "KBKeyDecryptError" do code nhúng trong flow tham chiếu 1
+# symbol nội bộ lfx đã đổi/xoá giữa 2 bản "latest". Nâng version phải chủ
+# động đổi tag ở ĐÂY (và langflow-runtime/values.yaml), không để tự trôi.
 langflow:
   global:
     image:
-      tag: "latest"
+      tag: "1.12.0"
   backend:
     replicaCount: 1
     service:
@@ -64,7 +71,7 @@ langflow:
     image:
       repository: langflowai/langflow
       imagePullPolicy: IfNotPresent
-      tag: latest
+      tag: "1.12.0"
     command:
       - python
       - -m
@@ -246,7 +253,7 @@ langflow:
     image:
       repository: langflowai/langflow-frontend
       imagePullPolicy: IfNotPresent
-      tag: latest
+      tag: "1.12.0"
     resources:
       requests:
         cpu: 0.3
