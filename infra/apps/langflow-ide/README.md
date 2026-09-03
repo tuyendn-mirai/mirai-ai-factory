@@ -33,6 +33,25 @@ kubectl get externalsecret langflow-credentials -n langflow
 # STATUS: SecretSynced, READY: True
 ```
 
+## PVC share Knowledge Base data với langflow-runtime
+
+Manifest: [`pvc-shared-data.yaml`](pvc-shared-data.yaml) — 1
+`PersistentVolumeClaim` (`langflow-shared-data`, RWO, `storageClassName:
+local-path`) mount vào `/app/data` ở CẢ langflow-ide và
+[`../langflow-runtime/`](../langflow-runtime/README.md). Trước đây mỗi
+chart tự `emptyDir: {}` riêng — flow definition thì share được qua Postgres
+chung, nhưng Langflow's Knowledge component (Document Q&A tool) index
+Knowledge Base xuống local filesystem, không phải DB, nên KB tạo/index qua
+UI IDE không thấy được ở runtime → lỗi `Metadata not found for knowledge
+base: X. Ensure it has been indexed.` dù đã index. Áp dụng bằng `kubectl
+apply` thường, không qua ArgoCD (cùng lý do như `external-secret.yaml`).
+
+`local-path` chỉ hỗ trợ RWO + bind theo node đầu tiên claim
+(`WaitForFirstConsumer`) — cụm 4 node nên bắt buộc `nodeSelector:
+kubernetes.io/hostname: k3d-mirai-eks-agent-0` ở CẢ 2 chart (xem
+`values.yaml`) để pod của cả 2 Deployment luôn nằm cùng node, nếu không pod
+thứ 2 apply sau sẽ Pending do volume node affinity conflict.
+
 ## Quyết định thiết kế đáng chú ý
 
 - **Database "langflow" riêng, không phải schema**: khác `ai_factory`

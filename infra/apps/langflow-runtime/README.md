@@ -61,6 +61,16 @@ Username and password must be set`. Fix: thêm đúng 5 biến
 `../langflow-ide/values.yaml`) vì chung 1 DB/user table, setup này idempotent
 (tìm thấy superuser đã có sẵn, không tạo trùng).
 
+## PVC share Knowledge Base data với langflow-ide
+
+Xem [`../langflow-ide/README.md`](../langflow-ide/README.md#pvc-share-knowledge-base-data-với-langflow-runtime)
+và [`../langflow-ide/pvc-shared-data.yaml`](../langflow-ide/pvc-shared-data.yaml)
+— PVC `langflow-shared-data` mount vào `/app/data`, dùng CHUNG với
+`langflow-ide` để KB index qua UI IDE chạy được ở runtime này (trước đây
+mỗi chart `emptyDir: {}` riêng → lỗi `Metadata not found for knowledge
+base: X`). Cả 2 chart phải cùng `nodeSelector` (xem `values.yaml`) vì PVC
+là RWO/`local-path`.
+
 ## Trạng thái hiện tại
 
 Langflow Runtime chạy trong `mirai-eks`, cùng Postgres `langflow` với

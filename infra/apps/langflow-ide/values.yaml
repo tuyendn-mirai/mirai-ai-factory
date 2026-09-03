@@ -101,7 +101,10 @@ langflow:
         value: "http://litellm.litellm.svc.cluster.local:4000"
       - name: LANGFLOW_SSRF_ALLOWED_HOSTS
         value: "litellm.litellm.svc.cluster.local,langfuse-web.langfuse.svc.cluster.local"
-    nodeSelector: {}
+    # Ghim vào 1 node cố định — bắt buộc để share PVC "langflow-shared-data"
+    # (RWO, local-path) với langflow-runtime, xem pvc-shared-data.yaml.
+    nodeSelector:
+      kubernetes.io/hostname: k3d-mirai-eks-agent-0
     tolerations: []
     affinity: {}
     podAnnotations:
@@ -156,8 +159,11 @@ langflow:
         emptyDir: {}
       - name: tmp
         emptyDir: {}
+      # PVC dùng CHUNG với langflow-runtime để Knowledge Base index qua UI
+      # IDE cũng thấy được ở runtime — xem pvc-shared-data.yaml.
       - name: data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: langflow-shared-data
       - name: db
         emptyDir: {}
 

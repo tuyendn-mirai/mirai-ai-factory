@@ -1,0 +1,32 @@
+# Dùng CHUNG cho cả langflow-ide và ../langflow-runtime/ — cả 2 Deployment
+# mount PVC này vào /app/data. Langflow's "Knowledge" component (Document
+# Q&A tool) index KB xuống local filesystem /app/data, KHÔNG lưu trong
+# Postgres như flow definition — trước khi có PVC này, mỗi chart tự
+# `emptyDir: {}` riêng nên KB index ở IDE (nơi build/test flow) không thấy
+# được ở Runtime (nơi flow thực sự chạy) → lỗi "Metadata not found for
+# knowledge base: X. Ensure it has been indexed." dù đã index qua UI IDE.
+#
+# storageClass "local-path" (rancher.io/local-path, mặc định cụm này) chỉ hỗ
+# trợ ReadWriteOnce và bind theo node đầu tiên claim nó (WaitForFirstConsumer)
+# — cụm nhiều node nên PHẢI ghim cả 2 Deployment vào CÙNG 1 node bằng
+# nodeSelector (xem values.yaml của langflow-ide và langflow-runtime,
+# `kubernetes.io/hostname: k3d-mirai-eks-agent-0`), nếu không pod thứ 2 sẽ
+# Pending do volume node affinity conflict. Không dùng ReadWriteMany vì cụm
+# này không có storageClass nào hỗ trợ (chỉ local-path/gp2 đều
+# rancher.io/local-path).
+#
+# Áp dụng bằng `kubectl apply` thường — không qua ArgoCD, cùng lý do như
+# ../external-secrets/clustersecretstore.yaml: app-of-apps chỉ quét
+# application.yaml, không quản lý resource thường khác.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: langflow-shared-data
+  namespace: langflow
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi

@@ -135,8 +135,13 @@ volumes:
     emptyDir: {}
   - name: tmp
     emptyDir: {}
+  # PVC dùng CHUNG với langflow-ide (../langflow-ide/pvc-shared-data.yaml) —
+  # Knowledge Base index qua UI IDE cần thấy được ở đây thì Document Q&A
+  # tool mới chạy được (trước đây mỗi chart emptyDir riêng nên runtime luôn
+  # báo "Metadata not found for knowledge base: X").
   - name: data
-    emptyDir: {}
+    persistentVolumeClaim:
+      claimName: langflow-shared-data
   - name: db
     emptyDir: {}
 
@@ -154,7 +159,11 @@ volumeMounts:
     mountPath: /app/db
     readOnly: false
 
-nodeSelector: {}
+# Ghim CÙNG node với langflow-ide — bắt buộc để share PVC
+# "langflow-shared-data" (RWO, local-path), xem
+# ../langflow-ide/pvc-shared-data.yaml.
+nodeSelector:
+  kubernetes.io/hostname: k3d-mirai-eks-agent-0
 
 tolerations: []
 
