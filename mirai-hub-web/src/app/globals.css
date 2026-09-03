@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Wired 1:1 from mirai-hub-api/public/theme.json — light block is the
+   only one rendered by any of the 4 approved mockups, but the dark block
+   is kept in sync so flipping the ThemeProvider's default is a one-line
+   change later (see providers/ThemeProvider.tsx). */
+@layer base {
+  :root {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", monospace;
+    --radius: 0.5rem;
+
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 90% 20%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 90% 20%;
+    --sidebar-background: 221 30% 97%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 90% 20%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 221 30% 93%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 221 90% 20%;
+  }
+
+  .dark {
+    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", monospace;
+    --radius: 0.5rem;
+
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+    --card: 222 45% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 45% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 20%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+@keyframes mh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer components {
+  /* Borderless, transparent inline text input — used inside a styled
+     container (login fields, composer, MCP search bar) that already
+     draws the border/background/focus ring itself. */
+  .mh-input {
+    @apply border-0 bg-transparent font-sans outline-none placeholder:text-muted-foreground;
+  }
+}

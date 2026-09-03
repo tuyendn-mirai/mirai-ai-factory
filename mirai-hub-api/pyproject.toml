@@ -1,0 +1,16 @@
+[project]
+name = "mirai-hub-api"
+version = "0.3.0"
+description = "Mirai Hub — Layer 5 chat API (FastAPI, decoupled from the Next.js frontend)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "asyncpg>=0.30.0",
+    "pyjwt>=2.9.0",
+    "sse-starlette>=2.1.3",
+    "boto3>=1.35.0",
+    "openai>=2.0.0",
+    "mcp>=1.28.1",
+    "pydantic-settings>=2.14.2",
+]

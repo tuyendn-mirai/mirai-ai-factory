@@ -1,0 +1,23 @@
+# Thay thế Ingress cũ của mirai-hub (Chainlit) — mirai-hub-web giờ là chủ
+# của host hub.mirai.local. mirai-hub-api không còn Ingress công khai
+# (ClusterIP-only, xem infra/apps/mirai-hub-api).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mirai-hub-web
+  namespace: mirai-hub
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: hub.mirai.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mirai-hub-web
+                port:
+                  name: http

@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirai-hub-web
+  namespace: mirai-hub
+  labels:
+    app.kubernetes.io/name: mirai-hub-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mirai-hub-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mirai-hub-web
+    spec:
+      containers:
+        - name: mirai-hub-web
+          # Không qua registry — build local rồi `k3d image import` thẳng
+          # vào containerd của cluster, giống mirai-hub-api. IfNotPresent
+          # bắt buộc vì không có registry thật cho image này.
+          image: mirai-hub-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            # Chỉ 1 biến — mọi secret khác (DB/S3/LiteLLM/Langflow) ở lại
+            # bên backend. Đây là DNS nội bộ k8s trỏ vào Service của
+            # mirai-hub-api (xem infra/apps/mirai-hub-api/manifests/service.yaml).
+            - name: BACKEND_INTERNAL_URL
+              value: http://mirai-hub-api.mirai-hub.svc.cluster.local:8000
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi

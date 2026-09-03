@@ -1,0 +1,34 @@
+# ArgoCD Application cho mirai-hub-web (Layer 5 frontend) — KHÔNG dùng
+# Helm, giống mirai-hub-api: app tự viết (source ở ../../../mirai-hub-web/),
+# không có chart để clone values.yaml. Source trỏ thẳng plain manifest
+# trong manifests/ (Deployment/Service/Ingress).
+#
+# mirai-hub-web thay thế mirai-hub-api làm chủ Ingress hub.mirai.local —
+# xem infra/apps/mirai-hub-api/manifests (ClusterIP-only, không Ingress
+# công khai nữa) và plan golden-hatching-honey.md.
+#
+# Chưa Healthy ngay sau khi apply — image trong manifests/deployment.yaml
+# là placeholder, chưa có registry local nào build/push thật (build local
+# rồi `k3d image import`, giống quy trình của mirai-hub-api).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mirai-hub-web
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+    targetRevision: main
+    path: infra/apps/mirai-hub-web/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    # Cùng namespace với mirai-hub-api (Layer 5 backend) — giống cách
+    # langflow-ide/langflow-runtime (Layer 4) chia sẻ namespace "langflow".
+    namespace: mirai-hub
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mirai-hub-web
+  namespace: mirai-hub
+spec:
+  selector:
+    app.kubernetes.io/name: mirai-hub-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
