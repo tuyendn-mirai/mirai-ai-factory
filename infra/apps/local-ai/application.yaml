@@ -1,0 +1,30 @@
+# ArgoCD Application for LocalAI (Tầng 2 — Model Serving, OpenAI-compatible
+# API cho model fine-tune riêng: OCR/TTS/STT), following the infra/apps/<name>/
+# convention: values.yaml is a real file in this repo (cloned from the
+# chart's defaults), referenced here via a second "values" source.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-ai
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://go-skynet.github.io/helm-charts
+      chart: local-ai
+      targetRevision: "3.4.2"
+      helm:
+        valueFiles:
+          - $values/infra/apps/local-ai/values.yaml
+    - repoURL: git@github.com:tuyendn-mirai/mirai-ai-factory.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: local-ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

@@ -74,6 +74,7 @@ vẫn là file thủ công — xem [`../argocd/argocd-ingress.yaml`](../argocd/a
 ## Apps hiện có
 
 - [`external-secrets/`](external-secrets/README.md) — Operator + ClusterSecretStore trỏ LocalStack
+- [`local-ai/`](local-ai/README.md) — Tầng 2, LocalAI (OpenAI-compatible model serving)
 - [`litellm/`](litellm/README.md) — Tầng 3, LiteLLM Proxy
 - [`langfuse/`](langfuse/README.md) — LLM observability
 - [`langflow-ide/`](langflow-ide/README.md) — Tầng 4, build/test flow (UI + API)
