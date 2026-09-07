@@ -7,8 +7,15 @@ replicaCount: 1
 deployment:
   image:
     repository: quay.io/go-skynet/local-ai
-    # Không có GPU node trong cụm mirai-eks (k3d) — dùng tag CPU-only.
-    tag: latest-cpu
+    # "latest-cpu" (gợi ý trong values mặc định của chart) là tag CŨ, đứng yên
+    # ở v3.0.0 — image v3.0.0 không hiểu schema backend gallery hiện tại
+    # (backend/index.yaml trên master đã đổi format), nên cài whisperx báo lỗi
+    # "could not parse reference: ''" (resolve ra URI rỗng). "latest" (không
+    # suffix) mới là tag CPU multi-arch được build liên tục theo release mới
+    # nhất (xác nhận: digest trùng tag "v4.9.0" trên quay.io lúc viết README
+    # này) — pin version cụ thể thay vì tag nổi để tránh trôi khi upstream
+    # release tiếp.
+    tag: v4.9.0
   env:
     threads: 4
     context_size: 512

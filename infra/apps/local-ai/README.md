@@ -14,9 +14,16 @@ từ `mirai-hub-api` thay vì qua LiteLLM — xem thảo luận trong lịch s�
 
 ## Quyết định thiết kế đáng chú ý
 
-- **Không có GPU node trong cụm** (`kubectl get nodes` không thấy
-  `nvidia.com/gpu`) — dùng `deployment.image.tag: latest-cpu` thay vì
-  `latest` (build có CUDA, sẽ crash/không tận dụng được trên node CPU-only).
+- **`deployment.image.tag: v4.9.0`, KHÔNG dùng `latest-cpu`** (gợi ý trong
+  values mặc định của chart) — `latest-cpu` là tag CŨ đứng yên ở LocalAI
+  v3.0.0 (xác nhận bằng `local-ai run --help` bên trong pod), không hiểu
+  schema backend gallery hiện tại → xem mục "Backend gallery: whisperx" bên
+  dưới. Tag `latest` (không suffix) mới là build CPU multi-arch theo release
+  mới nhất (digest trùng tag version cụ thể trên quay.io lúc viết README
+  này) — pin version cụ thể (`v4.9.0`) thay vì tag nổi `latest` để tránh
+  trôi version ngoài ý muốn khi upstream release tiếp. Không có GPU node
+  trong cụm (`kubectl get nodes` không thấy `nvidia.com/gpu`) nên không cần
+  build CUDA.
 - **`persistence.models`/`persistence.output` ép `storageClass: local-path` +
   `accessModes: [ReadWriteOnce]`** — chart mặc định `ReadWriteMany`, nhưng
   cụm `mirai-eks` (k3d) chỉ có `local-path`/`gp2`
@@ -42,14 +49,35 @@ ERR Server error error="failed to load model with internal loader: backend not f
 /tmp/localai/backend_data/backend-assets/grpc/whisperx" ... status=500 url=/v1/audio/transcriptions
 ```
 
-Nguyên nhân: image `local-ai` chỉ bundle sẵn các backend "core" (llama.cpp,
+Nguyên nhân #1: image `local-ai` chỉ bundle sẵn các backend "core" (llama.cpp,
 whisper.cpp, piper, bert, ...). `whisperx` (kèm torch/ctranslate2, nặng) là
 gallery backend, chỉ tải về khi được cài rõ ràng — LocalAI KHÔNG tự
 install-on-demand lúc load model (xem `pkg/model/initializers.go`:
 `spawnGRPCModel` trả lỗi `backend not found` ngay nếu backend chưa có sẵn
 trong `backend-assets/grpc/`, không có fallback tự tải).
 
-Fix — 2 field thêm vào `deployment.env`:
+Nguyên nhân #2 (phát hiện sau khi fix #1): set `EXTERNAL_BACKENDS=whisperx`
+xong vẫn lỗi tiếp, đổi thành:
+
+```
+ERR error installing external backends error="failed to get image \"\":
+could not parse reference: \nerror installing backend whisperx"
+```
+
+Do image đang dùng tag `latest-cpu` — tag này CŨ, đứng yên ở LocalAI v3.0.0
+(`local-ai run --help` trong pod in ra `Version: v3.0.0`). Flag
+`--backend-galleries` mặc định trỏ `backend/index.yaml@master` (HEAD hiện
+tại của repo, LUÔN mới nhất bất kể version binary) — nhưng schema của file
+đó trên `master` đã đổi (mỗi entry gallery giờ có field `capabilities` lồng
+theo platform) so với lúc binary v3.0.0 được build, nên binary v3.0.0 không
+tách được URI image cụ thể cho `whisperx` → ra chuỗi rỗng. Kiểm tra thêm:
+tag `@v3.0.0` của `backend/index.yaml` thậm chí chưa có entry `whisperx`
+(backend này được thêm sau đó) — nên pin gallery về đúng version binary
+cũng không giải quyết được, phải đổi hẳn sang tag image mới hơn (xem
+`deployment.image.tag` ở trên).
+
+Fix — đổi `deployment.image.tag` sang `v4.9.0` + 2 field thêm vào
+`deployment.env`:
 
 - `external_backends: "whisperx"` → env `EXTERNAL_BACKENDS`, danh sách
   backend cài từ gallery lúc boot (xem `core/application/startup.go`, vòng
