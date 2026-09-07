@@ -92,11 +92,18 @@ Fix — đổi `deployment.image.tag` sang `v4.9.0` + 2 field thêm vào
   các lần restart/deploy lại.
 
 Sau khi commit+push, ArgoCD `selfHeal` tự áp lại (không cần `kubectl apply`
-tay) — pod restart, backend `whisperx` được tải về lúc boot. Verify:
+tay, chỉ cần đợi vòng poll ~3 phút hoặc ép `kubectl annotate application
+local-ai -n argocd argocd.argoproj.io/refresh=hard --overwrite` để không phải
+đợi) — pod restart, backend `whisperx` được tải về lúc boot (~4.2GB layer,
+kèm venv Python/torch riêng cho backend — mất vài phút, HTTP server CHỈ mở
+port sau khi cài xong vì `InstallExternalBackend` chạy blocking trước khi
+start API, xem `core/application/startup.go`). Đã verify thật (không chỉ lý
+thuyết) trên `mirai-eks`: `curl .../v1/audio/transcriptions -F
+model=whisperx-tiny` trả `200` kèm transcript. Verify lại:
 
 ```bash
 kubectl logs -n local-ai deploy/local-ai | grep -i whisperx
-# INF installing backend ... whisperx (hoặc tương tự) thay vì lỗi "backend not found"
+# WARN installing OCI backend ... backend=cpu-whisperx ... (không còn lỗi "backend not found")
 curl -X POST http://local-ai.mirai.local/v1/audio/transcriptions \
   -F file="@sample.wav" -F model="whisperx-tiny"
 ```
@@ -115,7 +122,8 @@ duyệt — xem lưu ý SSH remote trong [`../../argocd/README.md`](../../argocd
 
 ## Trạng thái hiện tại
 
-Chạy trong `mirai-eks` (namespace `local-ai`, 1 pod Running). Chưa có model
-fine-tune (OCR/TTS/STT) riêng nào được nạp — đang test bằng model gallery có
-sẵn (`whisperx-tiny`) để verify backend gallery hoạt động, xem mục
-"Backend gallery: whisperx" ở trên.
+Chạy trong `mirai-eks` (namespace `local-ai`, image `v4.9.0`, 1 pod Running).
+Backend gallery `whisperx` cài thành công lúc boot, đã verify
+`/v1/audio/transcriptions` trả `200`. Chưa có model fine-tune (OCR/TTS/STT)
+riêng nào của team được nạp — model `whisperx-tiny` hiện dùng chỉ để verify
+pipeline, xem mục "Backend gallery: whisperx" ở trên.
