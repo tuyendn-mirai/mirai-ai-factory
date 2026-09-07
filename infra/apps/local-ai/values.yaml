@@ -12,6 +12,15 @@ deployment:
   env:
     threads: 4
     context_size: 512
+    # Backend gallery: whisperx KHÔNG bundle sẵn trong image local-ai (chỉ
+    # core backends như llama.cpp/whisper.cpp/piper) — phải cài qua backend
+    # gallery lúc boot, xem README.md#backend-gallery-whisperx.
+    external_backends: "whisperx"
+    # Mặc định BACKENDS_PATH nằm trên filesystem tạm của pod (không PVC nào
+    # mount vào đó) — backend tải về (~vài trăm MB-GB, whisperx kèm
+    # torch/ctranslate2) sẽ mất và phải tải lại mỗi lần pod restart. Trỏ vào
+    # PVC persistence.models (đã mount /models) để cache qua các lần restart.
+    backends_path: "/models/backends"
 
   # # Inject Secrets into Environment:
   # secretEnv:
