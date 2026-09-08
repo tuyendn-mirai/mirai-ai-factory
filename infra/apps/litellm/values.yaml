@@ -152,6 +152,29 @@ proxy_config:
         hinh_thuc_trien_khai: on-premise
         status: active
 
+    # LocalAI (Tầng 2, xem ../local-ai/README.md) chạy NGAY TRONG cụm
+    # mirai-eks (namespace local-ai) — khác Ollama/Postgres/Redis chạy trên
+    # host qua host.k3d.internal — nên gọi thẳng qua Service DNS nội bộ
+    # cluster, KHÔNG qua ingress local-ai.mirai.local (đã tự verify: `curl`
+    # từ bên trong pod litellm tới http://local-ai.local-ai.svc.cluster.local
+    # trả 200). Tiền tố `openai/` báo litellm dùng provider OpenAI-compatible
+    # với api_base tuỳ chỉnh thay vì gọi thẳng api.openai.com — cùng cách
+    # dùng cho mọi server tự host implement chuẩn OpenAI API (LocalAI expose
+    # /v1/audio/transcriptions đúng chuẩn này). `api_base` phải có hậu tố
+    # /v1 (giống default "https://api.openai.com/v1" của OpenAI SDK) vì
+    # litellm tự nối thêm "/audio/transcriptions" phía sau. LocalAI hiện
+    # không bật xác thực API key — `api_key` chỉ là placeholder cho hài lòng
+    # OpenAI SDK (bắt buộc non-empty), LocalAI không kiểm tra giá trị này.
+    - model_name: whisperx-tiny
+      litellm_params:
+        model: openai/whisperx-tiny
+        api_base: "http://local-ai.local-ai.svc.cluster.local/v1"
+        api_key: "sk-local-ai-noauth"
+      model_info:
+        nguon_cung: local-ai
+        hinh_thuc_trien_khai: on-premise
+        status: active
+
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
 
