@@ -175,6 +175,18 @@ proxy_config:
         hinh_thuc_trien_khai: on-premise
         status: active
 
+    # TTS (/v1/audio/speech), cùng LocalAI/api_base ở trên, cùng lý do dùng
+    # tiền tố openai/ — xem comment phía trên model whisperx-tiny.
+    - model_name: vits-ljs-sherpa
+      litellm_params:
+        model: openai/vits-ljs-sherpa
+        api_base: "http://local-ai.local-ai.svc.cluster.local/v1"
+        api_key: "sk-local-ai-noauth"
+      model_info:
+        nguon_cung: local-ai
+        hinh_thuc_trien_khai: on-premise
+        status: active
+
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
 
