@@ -71,6 +71,48 @@ kubectl annotate externalsecret litellm-db-credentials litellm-env-secrets -n li
   `litellm.mirai.local`) — không tạo file `infra/ingress/litellm-ingress.yaml`
   riêng, xem lý do trong [`../README.md`](../README.md).
 
+## Model `whisperx-tiny` — nối tới LocalAI (Tầng 2)
+
+`model_list` có 1 entry trỏ tới [`../local-ai/README.md`](../local-ai/README.md)
+(model STT `whisperx-tiny`, backend `whisperx`). Khác với Ollama (chạy trên
+host, gọi qua `host.k3d.internal`), LocalAI chạy NGAY TRONG cụm `mirai-eks`
+(namespace `local-ai`) — nên `api_base` trỏ Service DNS nội bộ
+(`http://local-ai.local-ai.svc.cluster.local/v1`), KHÔNG qua ingress
+`local-ai.mirai.local` (đã tự verify: `curl`/Python `urllib` từ bên trong pod
+`litellm` gọi thẳng Service DNS trả `200`).
+
+`model: openai/whisperx-tiny` — tiền tố `openai/` báo litellm dùng provider
+generic "OpenAI-compatible custom endpoint" (không phải gọi thật
+`api.openai.com`), đúng cách chuẩn cho mọi server tự host implement chuẩn
+OpenAI API. `api_base` phải có hậu tố `/v1` (giống mặc định
+`https://api.openai.com/v1` của OpenAI SDK) vì litellm tự nối thêm
+`/audio/transcriptions` phía sau. LocalAI hiện không bật xác thực API key —
+`api_key: sk-local-ai-noauth` chỉ là placeholder cho OpenAI SDK hài lòng
+(bắt buộc non-empty), LocalAI không kiểm tra giá trị này.
+
+**Đổi `proxy_config` (ConfigMap) KHÔNG tự làm pod restart** — LiteLLM chỉ đọc
+`config.yaml` lúc khởi động process, không hot-reload khi ConfigMap đổi
+(chart này không có checksum annotation nào trên Deployment để ép rolling
+update theo nội dung ConfigMap). Sau mỗi lần sửa `model_list`/`proxy_config`
+và ArgoCD sync xong, phải tự:
+
+```bash
+kubectl rollout restart deployment/litellm -n litellm
+kubectl rollout status deployment/litellm -n litellm
+```
+
+Đã verify thật (không chỉ lý thuyết) trên `mirai-eks`: gọi
+`/v1/audio/transcriptions` qua chính LiteLLM (`model=whisperx-tiny`, kèm
+`Authorization: Bearer <masterkey>`) trả `200` với transcript thật — LiteLLM
+proxy đúng tới LocalAI phía sau.
+
+```bash
+curl -X POST http://litellm.mirai.local/v1/audio/transcriptions \
+  -H "Authorization: Bearer Adgjmptw1" \
+  -F model="whisperx-tiny" \
+  -F file="@sample.wav;type=audio/wav"
+```
+
 ## Bug của chart `litellm-helm` (mọi version tính đến `0.1.100`)
 
 initContainer `db-ready` hard-code cứng image

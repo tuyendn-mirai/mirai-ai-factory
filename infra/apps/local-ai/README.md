@@ -127,3 +127,7 @@ Backend gallery `whisperx` cài thành công lúc boot, đã verify
 `/v1/audio/transcriptions` trả `200`. Chưa có model fine-tune (OCR/TTS/STT)
 riêng nào của team được nạp — model `whisperx-tiny` hiện dùng chỉ để verify
 pipeline, xem mục "Backend gallery: whisperx" ở trên.
+
+Đã nối tới LiteLLM (Tầng 3) — xem
+[`../litellm/README.md#model-whisperx-tiny--nối-tới-localai-tầng-2`](../litellm/README.md#model-whisperx-tiny--nối-tới-localai-tầng-2),
+verify thật `/v1/audio/transcriptions` qua chính LiteLLM trả transcript.
