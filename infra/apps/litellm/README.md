@@ -113,6 +113,33 @@ curl -X POST http://litellm.mirai.local/v1/audio/transcriptions \
   -F file="@sample.wav;type=audio/wav"
 ```
 
+## Model `vits-ljs-sherpa` — TTS, cùng LocalAI
+
+Cùng entry pattern với `whisperx-tiny` ở trên (cùng `api_base`, cùng lý do
+`openai/` prefix), khác endpoint: `/v1/audio/speech` (TTS) thay vì
+`/v1/audio/transcriptions` (STT). Model này serve bằng backend `vits` qua
+sherpa-onnx trên LocalAI.
+
+**`voice` là field BẮT BUỘC** trên `/v1/audio/speech` của LiteLLM (mirror
+đúng chuẩn OpenAI TTS API) — thiếu field này lỗi `500`:
+`TypeError: Router.aspeech() missing 1 required positional argument: 'voice'`
+(xem traceback qua `kubectl logs -n litellm deploy/litellm`, message trả về
+cho client chỉ chung chung `"Internal server error"`, không lộ traceback).
+`vits-ljs-sherpa` là model 1-giọng (LJSpeech), LocalAI không dùng giá trị
+`voice` để chọn giọng khác — set gì cũng được (không để trống), ví dụ
+`"default"`.
+
+Đã verify thật: `/v1/audio/speech` qua LiteLLM trả `200`,
+`content-type: audio/mpeg`, file audio thật (~36KB cho câu ngắn).
+
+```bash
+curl -X POST http://litellm.mirai.local/v1/audio/speech \
+  -H "Authorization: Bearer Adgjmptw1" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "vits-ljs-sherpa", "input": "Hello from LiteLLM.", "voice": "default"}' \
+  --output out.mp3
+```
+
 ## Bug của chart `litellm-helm` (mọi version tính đến `0.1.100`)
 
 initContainer `db-ready` hard-code cứng image
