@@ -16,6 +16,17 @@ import { cn } from "@/lib/utils";
 // of playing it — an inline <audio> element plays it directly in the bubble.
 const AUDIO_EXTENSION_RE = /\.(mp3|wav|ogg|m4a|flac)(\?|#|$)/i;
 
+// Same link, pulled out of a raw (non-rendered) string — used by
+// ToolStepCard/MessageList to surface a playable response even when the
+// model's own final reply doesn't happen to repeat the tool's markdown link
+// verbatim. Requires the markdown-link form (not a bare URL) since that's
+// exactly what the TTS component emits.
+const AUDIO_MARKDOWN_LINK_RE = /\[[^\]]*\]\((https?:\/\/[^\s)]+\.(?:mp3|wav|ogg|m4a|flac)(?:\?[^\s)]*)?)\)/i;
+
+export function extractAudioUrl(text: string): string | null {
+  return AUDIO_MARKDOWN_LINK_RE.exec(text)?.[1] ?? null;
+}
+
 const components: Components = {
   p: ({ children }) => <p className="whitespace-pre-wrap [&:not(:first-child)]:mt-3">{children}</p>,
   ul: ({ children }) => <ul className="ml-5 list-disc space-y-1 [&:not(:first-child)]:mt-3">{children}</ul>,

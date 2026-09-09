@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { groupMessagesIntoBlocks } from "@/lib/group-messages";
 import type { ThreadMessage } from "@/lib/types";
-import { Markdown } from "./Markdown";
+import { extractAudioUrl, Markdown } from "./Markdown";
 import { MessageBubble } from "./MessageBubble";
 import { ToolStepCard } from "./ToolStepCard";
 import type { PendingUserMessage, StreamTurnItem } from "@/hooks/useThreadStream";
@@ -26,17 +26,33 @@ function AssistantHeader() {
   );
 }
 
+/** Plays a tool's TTS reply immediately, without the user needing to expand
+ * ToolStepCard's collapsed technical view — the model's own final reply
+ * doesn't reliably repeat the raw "[Download audio](url)" markdown link the
+ * flow's tool result carries (see Markdown.tsx's extractAudioUrl), so this
+ * is the one place that reply is guaranteed to be reachable/playable at all.
+ */
+function ToolAudioReply({ result }: { result: unknown }) {
+  if (typeof result !== "string") return null;
+  const url = extractAudioUrl(result);
+  if (!url) return null;
+  return <audio controls preload="none" src={url} className="h-9 max-w-full" />;
+}
+
 function AssistantStep({ step, mcpProjectName }: { step: ThreadMessage; mcpProjectName: string | null }) {
   if (step.type === "tool") {
     return (
-      <ToolStepCard
-        name={step.name ?? "tool"}
-        args={step.args}
-        result={step.result}
-        durationMs={step.durationMs}
-        mcpProjectName={mcpProjectName}
-        status="done"
-      />
+      <>
+        <ToolStepCard
+          name={step.name ?? "tool"}
+          args={step.args}
+          result={step.result}
+          durationMs={step.durationMs}
+          mcpProjectName={mcpProjectName}
+          status="done"
+        />
+        <ToolAudioReply result={step.result} />
+      </>
     );
   }
   // A tool-calling turn persists an assistant_message step before the tool
@@ -129,15 +145,17 @@ export function MessageList({
             <AssistantHeader />
             {turnItems.map((item) =>
               item.kind === "tool" ? (
-                <ToolStepCard
-                  key={item.id}
-                  name={item.name}
-                  args={item.args}
-                  result={item.result}
-                  durationMs={item.durationMs}
-                  mcpProjectName={mcpProjectName}
-                  status={item.status}
-                />
+                <div key={item.id} className="flex flex-col gap-2">
+                  <ToolStepCard
+                    name={item.name}
+                    args={item.args}
+                    result={item.result}
+                    durationMs={item.durationMs}
+                    mcpProjectName={mcpProjectName}
+                    status={item.status}
+                  />
+                  <ToolAudioReply result={item.result} />
+                </div>
               ) : (
                 item.text.length > 0 && <Markdown key={item.id} content={item.text} />
               ),
