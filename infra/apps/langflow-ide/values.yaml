@@ -108,6 +108,12 @@ langflow:
         value: "http://litellm.litellm.svc.cluster.local:4000"
       - name: LANGFLOW_SSRF_ALLOWED_HOSTS
         value: "litellm.litellm.svc.cluster.local,langfuse-web.langfuse.svc.cluster.local"
+      # Nạp 2 custom component LiteLLM STT/TTS từ ConfigMap
+      # custom-components-configmap.yaml (mount ở volumes/volumeMounts bên
+      # dưới) để chúng tự hiện trong sidebar, không cần copy-paste tay vào
+      # node Custom Component mỗi flow. Xem custom_components/README.md.
+      - name: LANGFLOW_COMPONENTS_PATH
+        value: "/app/custom_components"
     # Ghim vào 1 node cố định — bắt buộc để share PVC "langflow-shared-data"
     # (RWO, local-path) với langflow-runtime, xem pvc-shared-data.yaml.
     nodeSelector:
@@ -173,6 +179,11 @@ langflow:
           claimName: langflow-shared-data
       - name: db
         emptyDir: {}
+      # Custom component source (custom-components-configmap.yaml, áp dụng
+      # bằng kubectl apply riêng, không qua ArgoCD).
+      - name: custom-components
+        configMap:
+          name: langflow-custom-components
 
     volumeMounts:
       - name: flows
@@ -187,6 +198,9 @@ langflow:
       - name: db
         mountPath: /app/db
         readOnly: false
+      - name: custom-components
+        mountPath: /app/custom_components
+        readOnly: true
 
     # Tắt vì đã dùng externalDatabase ở trên — sqlite chỉ là fallback khi
     # không có Postgres ngoài.
