@@ -244,10 +244,19 @@ data:
                 )
             response.raise_for_status()
 
+            # LiteLLM's response Content-Type for this endpoint is not trustworthy:
+            # verified live that vits-ljs-sherpa (sherpa-onnx backend on LocalAI)
+            # returns real RIFF/WAVE bytes while LiteLLM's header still claims
+            # "audio/mpeg". Saving it as .mp3 anyway (trusting the header) mislabels
+            # the file - naming it by its actual container format matters once
+            # something downstream infers Content-Type from the extension (see
+            # mirai-hub-api's app/routers/files.py get_tool_audio, which proxies
+            # this file back to a browser with a real audio/* type).
+            file_name = f"{uuid.uuid4().hex}.wav" if response.content[:4] == b"RIFF" else f"{uuid.uuid4().hex}.mp3"
+
             # Same convention Langflow itself uses for uploaded files
             # (flow_id/file_name), served back through the Files API.
             flow_id = str(getattr(getattr(self, "graph", None), "flow_id", None) or "misc")
-            file_name = f"{uuid.uuid4().hex}.mp3"
 
             storage_service = get_storage_service()
             await storage_service.save_file(flow_id=flow_id, file_name=file_name, data=response.content)

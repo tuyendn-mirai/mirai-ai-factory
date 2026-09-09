@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -31,6 +32,26 @@ from app.mcp_client import McpBinding
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
+
+# Matches the markdown link a Langflow TTS component (e.g. voice_ticket_triage_mcp's
+# litellm_text_to_speech.py) emits: "[Download audio](http://<any-langflow-host>/api/v1/files/download/<flow_id>/<file>.<ext>)".
+_LANGFLOW_AUDIO_LINK_RE = re.compile(
+    r"https?://[^\s)]+/api/v1/files/download/([^/\s)]+)/([^/\s)]+\.(?:mp3|wav|ogg|m4a|flac))"
+)
+
+
+def _rewrite_langflow_audio_links(text: str) -> str:
+    """Rewrite a Langflow file-download URL to this app's own audio proxy.
+
+    A raw Langflow download link is unplayable straight from the browser —
+    see app/routers/files.py's get_tool_audio for the two stacked reasons
+    (Langflow's own auth, and a hardcoded response Content-Type). Rewriting
+    here (once, before the tool result is persisted or streamed) means every
+    consumer — the DB, the SSE event, any later re-render — sees the already-
+    fixed link; no client-side special-casing needed beyond recognizing an
+    audio-extension URL as playable (mirai-hub-web/src/components/chat/Markdown.tsx).
+    """
+    return _LANGFLOW_AUDIO_LINK_RE.sub(r"/api/files/tool-audio/\1/\2", text)
 
 
 @dataclass
@@ -155,6 +176,7 @@ async def run_turn(
                     try:
                         arguments = json.loads(call["arguments"] or "{}")
                         result_text = await mcp_client.call_tool(binding, call["name"], arguments)
+                        result_text = _rewrite_langflow_audio_links(result_text)
                         tool_is_error = result_text.startswith("Error")
                     except Exception as exc:
                         logger.exception("MCP tool call failed: %s", call["name"])

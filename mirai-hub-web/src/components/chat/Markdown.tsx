@@ -21,7 +21,11 @@ const AUDIO_EXTENSION_RE = /\.(mp3|wav|ogg|m4a|flac)(\?|#|$)/i;
 // model's own final reply doesn't happen to repeat the tool's markdown link
 // verbatim. Requires the markdown-link form (not a bare URL) since that's
 // exactly what the TTS component emits.
-const AUDIO_MARKDOWN_LINK_RE = /\[[^\]]*\]\((https?:\/\/[^\s)]+\.(?:mp3|wav|ogg|m4a|flac)(?:\?[^\s)]*)?)\)/i;
+// Matches an absolute URL or a root-relative path (the latter is what
+// mirai-hub-api's chat_loop.py rewrites a raw Langflow download link into —
+// see app/routers/files.py's get_tool_audio).
+const AUDIO_MARKDOWN_LINK_RE =
+  /\[[^\]]*\]\(((?:https?:\/\/[^\s)]+|\/[^\s)]+)\.(?:mp3|wav|ogg|m4a|flac)(?:\?[^\s)]*)?)\)/i;
 
 export function extractAudioUrl(text: string): string | null {
   return AUDIO_MARKDOWN_LINK_RE.exec(text)?.[1] ?? null;
