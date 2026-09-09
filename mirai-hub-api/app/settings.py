@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     app_aws_secret_key: str
     app_aws_region: str = "ap-northeast-1"
     dev_aws_endpoint: str | None = None  # unset against real AWS
+    # Browser-reachable in dev (dev_aws_endpoint is embedded in presigned PUT
+    # URLs handed to the browser) vs pod-reachable (dev_aws_endpoint_internal,
+    # embedded only in presign_get() URLs a Langflow flow fetches server-side
+    # as an MCP tool call) — see the comment above DEV_AWS_ENDPOINT in
+    # localstack/seed-secrets.sh for why these can't be the same value.
+    dev_aws_endpoint_internal: str | None = None
 
     # Layer 3 — LiteLLM (OpenAI-compatible), the chat model backend.
     litellm_base_url: str = "http://litellm.litellm.svc.cluster.local:4000"

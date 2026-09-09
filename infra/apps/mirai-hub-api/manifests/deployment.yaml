@@ -76,12 +76,29 @@ spec:
                   name: mirai-hub-credentials
                   key: app-aws-region
             # Unset against real AWS — only meaningful for the local MinIO
-            # instance, so optional:true.
+            # instance, so optional:true. Browser-reachable host: this value
+            # gets embedded verbatim into presigned PUT URLs handed straight
+            # to the browser (app/storage.py's presign_put) — a pod-only
+            # hostname here breaks every upload with a silent DNS failure the
+            # browser's fetch() swallows (no CORS/network error surfaced),
+            # which is exactly what host.k3d.internal was doing here before
+            # this got split (verified: that hostname does not resolve
+            # outside the k3d pod network, only from inside it).
             - name: DEV_AWS_ENDPOINT
               valueFrom:
                 secretKeyRef:
                   name: mirai-hub-credentials
                   key: dev-aws-endpoint
+                  optional: true
+            # Cluster-reachable host (host.k3d.internal) — for presign_get(),
+            # used only to build a URL a Langflow flow's own pod fetches
+            # server-side when invoked as an MCP tool (app/chat_loop.py's
+            # audio-attachment wiring), never given to the browser.
+            - name: DEV_AWS_ENDPOINT_INTERNAL
+              valueFrom:
+                secretKeyRef:
+                  name: mirai-hub-credentials
+                  key: dev-aws-endpoint-internal
                   optional: true
             # Layer 3 — LiteLLM (OpenAI-compatible), the chat model backend
             # for the tool-calling loop (mirai_hub/chat.py). Service DNS nội

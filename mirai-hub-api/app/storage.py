@@ -19,10 +19,10 @@ from app.settings import settings
 PRESIGN_EXPIRES_SECONDS = 900
 
 
-def _client():
+def _client(endpoint: str | None):
     return boto3.client(
         "s3",
-        endpoint_url=settings.dev_aws_endpoint,
+        endpoint_url=endpoint,
         aws_access_key_id=settings.app_aws_access_key,
         aws_secret_access_key=settings.app_aws_secret_key,
         region_name=settings.app_aws_region,
@@ -31,10 +31,16 @@ def _client():
 
 
 def presign_put(object_key: str, mime: str | None) -> str:
+    """Presigned PUT handed straight to the browser (see
+    POST /api/uploads/presign) — MUST use settings.dev_aws_endpoint (a
+    browser-reachable host), never dev_aws_endpoint_internal. A pod-only
+    hostname here breaks every upload with a DNS failure the browser's
+    fetch() swallows silently (no visible error, upload just never happens).
+    """
     params: dict[str, str] = {"Bucket": settings.bucket_name, "Key": object_key}
     if mime:
         params["ContentType"] = mime
-    client = _client()
+    client = _client(settings.dev_aws_endpoint)
     try:
         return client.generate_presigned_url(
             "put_object", Params=params, ExpiresIn=PRESIGN_EXPIRES_SECONDS
@@ -44,14 +50,16 @@ def presign_put(object_key: str, mime: str | None) -> str:
 
 
 def presign_get(object_key: str) -> str:
-    """Presigned GET so a caller outside this process (e.g. a Langflow flow
-    running in a different pod/namespace, invoked as an MCP tool) can fetch
-    an already-uploaded attachment by URL instead of needing direct MinIO
-    credentials. Mirrors presign_put's expiry (900s) — long enough for the
-    LLM to decide to call a tool and for that tool's flow to run, but the URL
-    is meant to be used once per turn, not persisted.
+    """Presigned GET for a caller INSIDE the cluster (a Langflow flow's own
+    pod, invoked as an MCP tool - see app/chat_loop.py) to fetch an
+    already-uploaded attachment by URL. Deliberately uses
+    dev_aws_endpoint_internal (falling back to dev_aws_endpoint if unset),
+    NOT the browser-facing host presign_put uses - this URL is never sent to
+    a browser. Mirrors presign_put's expiry (900s): long enough for the LLM
+    to decide to call a tool and for that tool's flow to run, but the URL is
+    meant to be used once per turn, not persisted.
     """
-    client = _client()
+    client = _client(settings.dev_aws_endpoint_internal or settings.dev_aws_endpoint)
     try:
         return client.generate_presigned_url(
             "get_object",

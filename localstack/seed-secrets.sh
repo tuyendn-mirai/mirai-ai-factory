@@ -108,6 +108,18 @@ seed_secret "mirai/langflow" "Credentials cho Langflow (Tầng 4) — IDE + Runt
 # đây — thêm field nào thì phải thêm cả ở đó (thiếu 1 property trong
 # LocalStack làm ExternalSecret lỗi SecretSyncedError cho cả object, không
 # phải lỗi cục bộ).
+#
+# DEV_AWS_ENDPOINT vs DEV_AWS_ENDPOINT_INTERNAL: KHÁC với mọi giá trị
+# host.k3d.internal khác trong file này (dùng cho pod tự kết nối), giá trị
+# đầu tiên bị app/storage.py nhúng thẳng vào presigned PUT URL trả về cho
+# BROWSER (upload file đi thẳng browser -> MinIO, API không chạm vào bytes)
+# — host.k3d.internal chỉ resolve được từ bên trong mạng pod k3d, browser
+# gọi vào sẽ lỗi DNS âm thầm (Composer.tsx nuốt lỗi, nhìn như "không làm gì"
+# khi bấm đính kèm file — đã tự gặp và fix). DEV_AWS_ENDPOINT_INTERNAL mới
+# là giá trị host.k3d.internal thật, chỉ dùng cho presign_get() (nhúng vào
+# tool call MCP cho 1 flow Langflow tự fetch từ trong pod của nó, xem
+# app/chat_loop.py) — 2 audience khác nhau cho 2 URL khác nhau, không gộp
+# lại được thành 1 giá trị chung.
 seed_secret "mirai/mirai-hub" "Credentials cho Mirai Hub (Tầng 5)" '{
   "CHAINLIT_AUTH_SECRET": "77ptErei0?^?X-HS5WCqM=G^2HHO8eU_.v9jM5QYueg%_*L_@I66>XrA_lu~jl~:",
   "DATABASE_URL": "postgresql+asyncpg://mirai:Adgjmptw1@host.k3d.internal:5435/ai_factory",
@@ -118,7 +130,8 @@ seed_secret "mirai/mirai-hub" "Credentials cho Mirai Hub (Tầng 5)" '{
   "APP_AWS_ACCESS_KEY": "mirahub",
   "APP_AWS_SECRET_KEY": "Adgjmptw1",
   "APP_AWS_REGION": "ap-northeast-1",
-  "DEV_AWS_ENDPOINT": "http://host.k3d.internal:9100",
+  "DEV_AWS_ENDPOINT": "http://localhost:9100",
+  "DEV_AWS_ENDPOINT_INTERNAL": "http://host.k3d.internal:9100",
   "LITELLM_API_KEY": "Adgjmptw1"
 }'
 
