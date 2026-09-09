@@ -16,22 +16,35 @@ interface ComposerProps {
   placeholder?: string;
 }
 
+// Picked in preference order — MediaRecorder only ever produces one of these
+// container formats (never mp3), and browser support for each varies. The
+// backend/AttachmentChip only care that the mime starts with "audio/", so any
+// of these is fine to upload as-is.
+const RECORDING_MIME_CANDIDATES = ["audio/webm", "audio/mp4", "audio/ogg"];
+
+function pickRecordingMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return RECORDING_MIME_CANDIDATES.find((mime) => MediaRecorder.isTypeSupported(mime));
+}
+
 export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholder }: ComposerProps) {
   const [text, setText] = useState("");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [focused, setFocused] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
 
   // Default resolved per the plan's open item: send is enabled with text
   // OR at least one staged attachment, not text-only.
-  const sendEnabled = (text.trim().length > 0 || attachments.length > 0) && !uploading && !streaming;
+  const sendEnabled = (text.trim().length > 0 || attachments.length > 0) && !uploading && !streaming && !recording;
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  // Shared by file-picker attach and mic recording — both end up with raw
+  // bytes + a filename/mime that need the same presign -> PUT -> confirm
+  // round trip (see the elementId note below).
+  async function uploadBlob(blob: Blob, filename: string, mime: string) {
     setUploading(true);
     try {
       const threadId = await ensureThreadId();
@@ -44,21 +57,66 @@ export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholde
       // silently no-opping — every attachment stayed orphaned on its
       // "pending_upload" placeholder step forever, so the model never saw it
       // (this is why a bound MCP tool that expects an audio_url never fired).
-      const { uploadUrl, objectKey } = await presignUpload(file.name, file.type || "application/octet-stream");
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "content-type": file.type || "application/octet-stream" } });
+      const { uploadUrl, objectKey } = await presignUpload(filename, mime);
+      await fetch(uploadUrl, { method: "PUT", body: blob, headers: { "content-type": mime } });
       const { elementId } = await confirmFileUpload(threadId, {
         objectKey,
-        name: file.name,
-        mime: file.type,
-        size: file.size,
+        name: filename,
+        mime,
+        size: blob.size,
       });
-      setAttachments((prev) => [...prev, { elementId, name: file.name, mime: file.type, size: file.size }]);
+      setAttachments((prev) => [...prev, { elementId, name: filename, mime, size: blob.size }]);
     } catch {
       // Upload failed silently for now — surfaced space is tight in the
       // composer; a future pass could add an inline error state here.
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await uploadBlob(file, file.name, file.type || "application/octet-stream");
+  }
+
+  async function startRecording() {
+    if (recording || uploading) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecordingMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        // Always release the mic — leaving the track live keeps the
+        // browser's recording indicator (tab/OS icon) on indefinitely.
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType });
+        const ext = recorder.mimeType.includes("mp4") ? "m4a" : recorder.mimeType.includes("ogg") ? "ogg" : "webm";
+        void uploadBlob(blob, `voice-note-${Date.now()}.${ext}`, recorder.mimeType);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      // Mic permission denied/unavailable, or getUserMedia blocked by an
+      // insecure context (it requires HTTPS or a literal "localhost" origin —
+      // a custom /etc/hosts hostname like hub.mirai.local over plain HTTP
+      // does not qualify, even though it resolves to 127.0.0.1). Same silent
+      // failure convention as the rest of this component's upload path.
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setRecording(false);
   }
 
   function removeAttachment(elementId: string) {
@@ -118,13 +176,38 @@ export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholde
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
+            disabled={uploading || recording}
             aria-label="Đính kèm tệp"
             className="flex h-8 w-8 flex-none items-center justify-center rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-50"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 12.5l-8.5 8.5a4 4 0 01-5.66-5.66l8.49-8.49a2.5 2.5 0 013.54 3.54l-8.49 8.49a1 1 0 01-1.41-1.41l7.78-7.78" />
             </svg>
+          </button>
+
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            disabled={uploading}
+            aria-label={recording ? "Dừng ghi âm" : "Ghi âm"}
+            className={cn(
+              "flex h-8 w-8 flex-none items-center justify-center rounded-lg disabled:opacity-50",
+              recording
+                ? "bg-destructive text-destructive-foreground animate-pulse"
+                : "text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {recording ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <rect x="5" y="5" width="14" height="14" rx="2" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3" />
+                <path d="M5 10a7 7 0 0 0 14 0" />
+                <path d="M12 17v4M8 21h8" />
+              </svg>
+            )}
           </button>
 
           {streaming ? (
@@ -164,7 +247,9 @@ export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholde
             </button>
           )}
         </div>
-        <span className="pl-1 text-[11px] text-muted-foreground">Enter để gửi · Shift+Enter để xuống dòng</span>
+        <span className="pl-1 text-[11px] text-muted-foreground">
+          {recording ? "Đang ghi âm… bấm nút mic để dừng" : "Enter để gửi · Shift+Enter để xuống dòng"}
+        </span>
       </div>
     </div>
   );
