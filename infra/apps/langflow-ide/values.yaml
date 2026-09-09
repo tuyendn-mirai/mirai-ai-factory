@@ -198,8 +198,22 @@ langflow:
       - name: db
         mountPath: /app/db
         readOnly: false
+      # subPath per file (KHÔNG mount cả thư mục) — ConfigMap volume mount
+      # thường tạo ra ..data/..<timestamp> (atomic-update symlink farm) mà
+      # Langflow's component scanner tự quét luôn như 1 category riêng, ra
+      # component bị duplicate dưới category rác "..2026_..." (đã tự gặp,
+      # verify qua GET /api/v1/all). subPath bỏ qua symlink farm, mount thẳng
+      # file thật — đổi lại: sửa nội dung ConfigMap sẽ KHÔNG tự update file
+      # trong pod đang chạy (subPath không hỗ trợ live-update, khác mount cả
+      # thư mục) — không sao vì đằng nào cũng phải rollout restart tay sau
+      # khi sửa (xem custom_components/README.md).
       - name: custom-components
-        mountPath: /app/custom_components
+        mountPath: /app/custom_components/litellm_speech_to_text.py
+        subPath: litellm_speech_to_text.py
+        readOnly: true
+      - name: custom-components
+        mountPath: /app/custom_components/litellm_text_to_speech.py
+        subPath: litellm_text_to_speech.py
         readOnly: true
 
     # Tắt vì đã dùng externalDatabase ở trên — sqlite chỉ là fallback khi
