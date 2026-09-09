@@ -219,6 +219,10 @@ langflow:
         mountPath: /app/custom_components/litellm_text_to_speech.py
         subPath: litellm_text_to_speech.py
         readOnly: true
+      - name: custom-components
+        mountPath: /app/custom_components/echo_delay_tool.py
+        subPath: echo_delay_tool.py
+        readOnly: true
 
     # Tắt vì đã dùng externalDatabase ở trên — sqlite chỉ là fallback khi
     # không có Postgres ngoài.
