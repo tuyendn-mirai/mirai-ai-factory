@@ -49,6 +49,18 @@ class LiteLLMTextToSpeech(Component):
                 "single-voice models - vits-ljs-sherpa ignores the value."
             ),
         ),
+        MessageTextInput(
+            name="public_base_url",
+            display_name="Public Base URL",
+            value="http://langflow.mirai.local",
+            info=(
+                "Browser/external-reachable Langflow origin, used ONLY for the "
+                "download link text (Ingress host) - unrelated to base_url "
+                "above (in-cluster LiteLLM address). A caller outside the "
+                "cluster (e.g. mirai-hub-web) can't resolve a bare relative "
+                "path or the internal Service DNS."
+            ),
+        ),
     ]
 
     outputs = [
@@ -81,7 +93,7 @@ class LiteLLMTextToSpeech(Component):
         # link sidesteps that validator entirely; the Files API endpoint also
         # always sends Content-Disposition: attachment, so this is a download
         # link, not an inline player, regardless of how it's delivered.
-        download_path = f"/api/v1/files/download/{flow_id}/{file_name}"
-        message = Message(text=f"{self.input_text}\n\n[Download audio]({download_path})")
+        download_url = f"{self.public_base_url.rstrip('/')}/api/v1/files/download/{flow_id}/{file_name}"
+        message = Message(text=f"{self.input_text}\n\n[Download audio]({download_url})")
         self.status = message
         return message
