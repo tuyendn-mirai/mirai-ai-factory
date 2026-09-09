@@ -35,9 +35,23 @@ export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholde
     setUploading(true);
     try {
       const threadId = await ensureThreadId();
-      const { uploadUrl, elementId, objectKey } = await presignUpload(file.name, file.type || "application/octet-stream");
+      // presignUpload's `elementId` is a throwaway UUID minted only to
+      // namespace the S3 object key (app/routers/files.py's presign_upload) —
+      // it is NOT a real "Element" row yet, so it must never be staged here.
+      // The real row (and its own, different, DB-generated id) is created by
+      // confirmFileUpload below; using the presign one instead meant
+      // chat_loop's reassign_step could never find a matching Element,
+      // silently no-opping — every attachment stayed orphaned on its
+      // "pending_upload" placeholder step forever, so the model never saw it
+      // (this is why a bound MCP tool that expects an audio_url never fired).
+      const { uploadUrl, objectKey } = await presignUpload(file.name, file.type || "application/octet-stream");
       await fetch(uploadUrl, { method: "PUT", body: file, headers: { "content-type": file.type || "application/octet-stream" } });
-      await confirmFileUpload(threadId, { objectKey, name: file.name, mime: file.type, size: file.size });
+      const { elementId } = await confirmFileUpload(threadId, {
+        objectKey,
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+      });
       setAttachments((prev) => [...prev, { elementId, name: file.name, mime: file.type, size: file.size }]);
     } catch {
       // Upload failed silently for now — surfaced space is tight in the
