@@ -24,7 +24,7 @@ from typing import Any
 
 import asyncpg
 
-from app import llm_client, mcp_client
+from app import llm_client, mcp_client, storage
 from app.db import elements as elements_db
 from app.db import steps as steps_db
 from app.mcp_client import McpBinding
@@ -56,6 +56,24 @@ async def run_turn(
 
     history = await steps_db.history_as_openai_messages(pool, thread_id)
     tools = binding.tools_openai if binding and binding.tools_openai else None
+
+    # Audio attachments: give the model a fetchable URL for this turn only —
+    # NOT persisted (history is rebuilt from the DB on every call, and this
+    # note is appended to the in-memory copy after that rebuild), because a
+    # presigned URL expires (storage.PRESIGN_EXPIRES_SECONDS) and replaying an
+    # expired one on a later turn would just fail. Without this, an MCP tool
+    # bound to the thread (e.g. a Langflow flow expecting an `audio_url`
+    # argument) has no way to learn the file exists — chat_loop previously
+    # never surfaced attachment content to the model at all.
+    audio_notes: list[str] = []
+    for element_id in attachment_element_ids:
+        element = await elements_db.get(pool, element_id)
+        if element is None or not (element["mime"] or "").startswith("audio/"):
+            continue
+        url = storage.presign_get(element["objectKey"])
+        audio_notes.append(f"[audio attachment: name={element['name']} url={url}]")
+    if audio_notes and history and history[-1].get("role") == "user":
+        history[-1]["content"] = (history[-1]["content"] or "") + "\n\n" + "\n".join(audio_notes)
 
     try:
         for round_no in range(settings.max_tool_roundtrips + 1):

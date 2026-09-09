@@ -5,27 +5,47 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "./useThreads";
 import type { PendingAttachment, ThreadStreamEvent } from "@/lib/types";
 
-export interface StreamingToolStep {
-  id: string;
-  name: string;
-  args: unknown;
-  result?: unknown;
-  durationMs?: number;
-  status: "running" | "done";
+// A live turn is a chronological sequence of text and tool-call segments —
+// a tool-calling turn round-trips the model multiple times (see
+// app/chat_loop.py's `for round_no in range(...)` loop), so a turn can be
+// text, then a tool call, then more text reacting to the result. Keeping
+// one ordered list (instead of a single accumulated string plus a
+// separate tool-steps array) is what lets the live view render them
+// interleaved in the order they actually happened, matching how the
+// persisted steps render once the turn finishes and messages refetch.
+export type StreamTurnItem =
+  | { kind: "text"; id: string; text: string }
+  | {
+      kind: "tool";
+      id: string;
+      name: string;
+      args: unknown;
+      result?: unknown;
+      durationMs?: number;
+      status: "running" | "done";
+    };
+
+export interface PendingUserMessage {
+  content: string;
+  attachments: PendingAttachment[];
 }
 
 interface StreamState {
   streaming: boolean;
-  assistantText: string;
-  toolSteps: StreamingToolStep[];
+  turnItems: StreamTurnItem[];
   error: string | null;
+  // The backend persists the user's step immediately, but `messages` (from
+  // useThreadQuery) only reflects it once the post-turn invalidation below
+  // refetches — without this, the question the user just typed doesn't
+  // appear at all until the assistant's whole reply has finished.
+  pendingUserMessage: PendingUserMessage | null;
 }
 
 const initialState: StreamState = {
   streaming: false,
-  assistantText: "",
-  toolSteps: [],
+  turnItems: [],
   error: null,
+  pendingUserMessage: null,
 };
 
 /**
@@ -51,7 +71,12 @@ export function useThreadStream(threadId: string) {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      setState({ streaming: true, assistantText: "", toolSteps: [], error: null });
+      setState({
+        streaming: true,
+        turnItems: [],
+        error: null,
+        pendingUserMessage: { content, attachments },
+      });
 
       try {
         const res = await fetch(`/api/threads/${threadId}/messages`, {
@@ -75,7 +100,11 @@ export function useThreadStream(threadId: string) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+          // sse-starlette (the backend's EventSourceResponse) writes CRLF
+          // line endings, not bare LF — normalize before any line-based
+          // parsing below, or "\n\n" never matches inside "\r\n\r\n" and no
+          // frame ever splits, silently dropping every event.
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
 
           // SSE frames are separated by a blank line.
           const frames = buffer.split("\n\n");
@@ -95,18 +124,42 @@ export function useThreadStream(threadId: string) {
         abortRef.current = null;
       }
 
+      async function settleAfterTurn() {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.thread(threadId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.threads });
+        // Clear the live turn now that the same content exists in the
+        // just-refetched persisted `messages` -- otherwise `turnItems`
+        // lingers until the next sendMessage() call resets it, and every
+        // finished reply renders twice: once from persisted messages, once
+        // from this now-stale "live" block (hasLiveTurn stays true as long
+        // as turnItems is non-empty, independent of `streaming`).
+        setState((s) => ({ ...s, pendingUserMessage: null, turnItems: [] }));
+      }
+
       function applyEvent(event: ThreadStreamEvent) {
         switch (event.type) {
           case "token":
-            setState((s) => ({ ...s, assistantText: s.assistantText + event.delta }));
+            setState((s) => {
+              const items = s.turnItems;
+              const last = items[items.length - 1];
+              if (last?.kind === "text") {
+                const updated = { ...last, text: last.text + event.delta };
+                return { ...s, turnItems: [...items.slice(0, -1), updated] };
+              }
+              return {
+                ...s,
+                turnItems: [...items, { kind: "text", id: `text-${items.length}`, text: event.delta }],
+              };
+            });
             break;
           case "tool_start":
             setState((s) => ({
               ...s,
-              toolSteps: [
-                ...s.toolSteps,
+              turnItems: [
+                ...s.turnItems,
                 {
-                  id: `${event.name}-${s.toolSteps.length}`,
+                  kind: "tool",
+                  id: `${event.name}-${s.turnItems.length}`,
                   name: event.name,
                   args: event.args,
                   status: "running",
@@ -117,20 +170,24 @@ export function useThreadStream(threadId: string) {
           case "tool_end":
             setState((s) => ({
               ...s,
-              toolSteps: s.toolSteps.map((step, idx) =>
-                idx === s.toolSteps.length - 1 && step.status === "running"
-                  ? { ...step, result: event.result, durationMs: event.durationMs, status: "done" }
-                  : step,
+              turnItems: s.turnItems.map((item, idx) =>
+                idx === s.turnItems.length - 1 && item.kind === "tool" && item.status === "running"
+                  ? { ...item, result: event.result, durationMs: event.durationMs, status: "done" }
+                  : item,
               ),
             }));
             break;
           case "message_done":
             setState((s) => ({ ...s, streaming: false }));
-            queryClient.invalidateQueries({ queryKey: queryKeys.thread(threadId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.threads });
+            void settleAfterTurn();
             break;
           case "error":
+            // The user's step was already persisted before the backend hit
+            // whatever failed (see app/chat_loop.py), so it still needs the
+            // same refetch-then-clear handoff, or the question the user
+            // typed disappears along with the pending bubble.
             setState((s) => ({ ...s, streaming: false, error: event.message }));
+            void settleAfterTurn();
             break;
         }
       }
@@ -139,6 +196,11 @@ export function useThreadStream(threadId: string) {
   );
 
   const stop = useCallback(async () => {
+    // Deliberately leaves turnItems/pendingUserMessage as-is: whatever
+    // streamed in before Stop wasn't persisted (chat_loop only writes a
+    // step once a round completes), so this is the only copy of it —
+    // clearing it here would erase the partial answer instead of freezing
+    // it in place. It resets naturally on the next sendMessage() call.
     abortRef.current?.abort();
     setState((s) => ({ ...s, streaming: false }));
     try {

@@ -8,6 +8,7 @@ export const queryKeys = {
   thread: (id: string) => ["threads", id] as const,
   models: ["models"] as const,
   mcpProjects: ["mcp-projects"] as const,
+  mcpProjectTools: (projectId: string) => ["mcp-projects", projectId, "tools"] as const,
   me: ["me"] as const,
 };
 
@@ -29,6 +30,15 @@ export function useModelsQuery() {
 
 export function useMcpProjectsQuery() {
   return useQuery({ queryKey: queryKeys.mcpProjects, queryFn: api.fetchMcpProjects });
+}
+
+export function useMcpProjectToolsQuery(projectId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.mcpProjectTools(projectId ?? ""),
+    queryFn: () => api.fetchMcpProjectTools(projectId as string),
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
 }
 
 export function useMeQuery() {

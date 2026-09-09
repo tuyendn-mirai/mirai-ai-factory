@@ -3,12 +3,16 @@ server picker. Pure I/O — moved from mirai_hub/langflow_client.py verbatim,
 only the settings import path changed.
 
 Endpoint shapes verified directly against langflow-ai/langflow source
-(current stable 1.11.5), not just docs:
+(current stable 1.12.0), not just docs:
 - GET /api/v1/projects/ -> list of projects (a project == a Langflow
   "folder"; each can expose its flows as an MCP server).
 - GET /api/v1/mcp/project/{id}/composer-url -> the actual URL to connect an
   MCP client to for that project (handles Langflow's own OAuth/Composer
   transparently); prefer streamable_http_url over the legacy SSE fallback.
+- GET /api/v1/mcp/project/{id} -> the tools that project's MCP server would
+  advertise, without opening an actual MCP session. Lets the server-picker
+  UI show "what's in here" before a thread pays for a real connect (see
+  get_project_tools below).
 """
 
 from __future__ import annotations
@@ -31,6 +35,15 @@ class LangflowProject:
 class ComposerUrl:
     streamable_http_url: str | None
     legacy_sse_url: str | None
+
+
+@dataclass(frozen=True)
+class ProjectTool:
+    id: str
+    name: str
+    action_name: str
+    description: str
+    mcp_enabled: bool
 
 
 def auth_headers() -> dict[str, str]:
@@ -67,6 +80,30 @@ def _rebase(url: str | None) -> str | None:
     if not url:
         return None
     return urljoin(settings.langflow_runtime_base_url + "/", urlsplit(url).path.lstrip("/"))
+
+
+async def get_project_tools(project_id: str) -> list[ProjectTool]:
+    """List the flows a project's MCP server would advertise as tools.
+
+    Unlike `mcp_client.connect`, this never opens an MCP session — it's the
+    plain REST listing Langflow's own frontend uses to render each project's
+    MCP settings panel. Only `mcp_enabled` flows count towards what a real
+    connect would expose; disabled ones come back too so the picker UI can
+    show them as such rather than silently omitting them.
+    """
+    async with _client() as client:
+        response = await client.get(f"/api/v1/mcp/project/{project_id}")
+        response.raise_for_status()
+        return [
+            ProjectTool(
+                id=t["id"],
+                name=t.get("name") or t["action_name"],
+                action_name=t["action_name"],
+                description=t.get("description") or t.get("action_description") or "",
+                mcp_enabled=bool(t.get("mcp_enabled")),
+            )
+            for t in response.json().get("tools", [])
+        ]
 
 
 async def get_composer_url(project_id: str) -> ComposerUrl:

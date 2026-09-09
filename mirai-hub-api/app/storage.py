@@ -41,3 +41,22 @@ def presign_put(object_key: str, mime: str | None) -> str:
         )
     finally:
         client.close()
+
+
+def presign_get(object_key: str) -> str:
+    """Presigned GET so a caller outside this process (e.g. a Langflow flow
+    running in a different pod/namespace, invoked as an MCP tool) can fetch
+    an already-uploaded attachment by URL instead of needing direct MinIO
+    credentials. Mirrors presign_put's expiry (900s) — long enough for the
+    LLM to decide to call a tool and for that tool's flow to run, but the URL
+    is meant to be used once per turn, not persisted.
+    """
+    client = _client()
+    try:
+        return client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.bucket_name, "Key": object_key},
+            ExpiresIn=PRESIGN_EXPIRES_SECONDS,
+        )
+    finally:
+        client.close()

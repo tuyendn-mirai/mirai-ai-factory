@@ -35,7 +35,11 @@ function McpServersPageInner() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    // min-h-0: see chat/[threadId]/page.tsx -- without it this div refuses
+    // to shrink below its content, so the project list below never gets a
+    // bounded box for overflow-y-auto and the whole document scrolls
+    // instead, dragging the sidebar off-screen with it.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex h-[52px] flex-none items-center justify-between border-b border-border px-7">
         <div className="flex items-center gap-3.5">
           <Link
@@ -53,7 +57,7 @@ function McpServersPageInner() {
         <McpSearchBar value={query} onChange={setQuery} />
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
         <p className="mb-[22px] max-w-[640px] text-[13px] leading-[1.6] text-muted-foreground">
           Danh sách project lấy trực tiếp từ Langflow — mỗi project có thể expose flow của nó thành một
           MCP server. Mỗi thread chat chỉ kết nối được tối đa{" "}
@@ -67,6 +71,7 @@ function McpServersPageInner() {
           connectedToolCount={lastToolCount}
           pendingProjectId={pendingProjectId}
           onToggle={handleToggle}
+          threadId={threadId}
         />
       </div>
     </div>

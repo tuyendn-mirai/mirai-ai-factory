@@ -138,6 +138,27 @@ async def disconnect(binding: McpBinding | None) -> None:
         logger.exception("MCP disconnect for project %s did not clean up cleanly", binding.project_id)
 
 
+async def list_tools_ephemeral(
+    project_id: str,
+    project_name: str,
+    streamable_url: str | None,
+    sse_url: str | None,
+    headers: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Open a throwaway MCP session just long enough to read `tools/list`
+    (with full `inputSchema`), then disconnect. Unlike `connect`, the
+    resulting binding is never registered anywhere — this is for browsing
+    a server's tools before any thread actually connects to it, where the
+    lightweight REST listing (langflow_client.get_project_tools) doesn't
+    carry per-tool input schema.
+    """
+    binding = await connect(project_id, project_name, streamable_url, sse_url, headers=headers)
+    try:
+        return binding.tools_openai
+    finally:
+        await disconnect(binding)
+
+
 async def call_tool(binding: McpBinding, name: str, arguments: dict[str, Any]) -> str:
     result = await binding.session.call_tool(name, arguments)
     text = "\n".join(block.text for block in result.content if getattr(block, "text", None))

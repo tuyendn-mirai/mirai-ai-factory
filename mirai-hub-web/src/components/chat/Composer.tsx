@@ -59,7 +59,13 @@ export function Composer({ onSend, ensureThreadId, streaming, onStop, placeholde
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // isComposing is true while a Vietnamese IME (Telex/VNI, etc.) is still
+    // resolving a tone mark or word -- the Enter that confirms that
+    // composition also reaches this handler. Without this check, it was
+    // treated as "send": the textarea cleared mid-composition, and the IME
+    // then committed its pending characters into the now-empty box,
+    // leaving stray leftover characters behind after every send.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }

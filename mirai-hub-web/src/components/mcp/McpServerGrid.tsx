@@ -8,6 +8,7 @@ interface McpServerGridProps {
   connectedToolCount: number | null;
   pendingProjectId: string | null;
   onToggle: (projectId: string) => void;
+  threadId?: string;
 }
 
 export function McpServerGrid({
@@ -17,6 +18,7 @@ export function McpServerGrid({
   connectedToolCount,
   pendingProjectId,
   onToggle,
+  threadId,
 }: McpServerGridProps) {
   const q = query.trim().toLowerCase();
   const filtered = q ? projects.filter((p) => p.name.toLowerCase().includes(q)) : projects;
@@ -45,6 +47,7 @@ export function McpServerGrid({
             toolCount={connected ? connectedToolCount : null}
             pending={pendingProjectId === project.id}
             onToggle={() => onToggle(project.id)}
+            threadId={threadId}
           />
         );
       })}

@@ -104,7 +104,9 @@ async def history_as_openai_messages(pool: asyncpg.Pool, thread_id: str) -> list
 
 async def steps_for_thread_api(pool: asyncpg.Pool, thread_id: str) -> list[dict[str, Any]]:
     """Shape Steps (+ their attached Elements) for `GET /api/threads/{id}`'s
-    `messages` field.
+    `messages` field, matching the frontend's `ThreadMessage` contract
+    (mirai-hub-web/src/lib/types.ts) rather than this module's own
+    input/output storage convention.
     """
     steps = await list_steps(pool, thread_id)
     elements = await elements_db.list_for_thread(pool, thread_id)
@@ -123,13 +125,17 @@ async def steps_for_thread_api(pool: asyncpg.Pool, thread_id: str) -> list[dict[
     for step in steps:
         if step["type"] == "undefined":
             continue  # pending-upload placeholders — not a real chat message
+        metadata = step["metadata"] or {}
+        is_tool = step["type"] == "tool"
         result.append(
             {
                 "id": step["id"],
                 "type": step["type"],
                 "name": step["name"],
-                "input": step["input"],
-                "output": step["output"],
+                "content": step["output"] if not is_tool else None,
+                "args": step["input"] if is_tool else None,
+                "result": step["output"] if is_tool else None,
+                "durationMs": metadata.get("durationMs") if is_tool else None,
                 "isError": step["isError"],
                 "createdAt": step["createdAt"].isoformat(),
                 "attachments": elements_by_step.get(step["id"], []),

@@ -100,6 +100,30 @@ class McpRequest(BaseModel):
     projectId: str | None = None
 
 
+async def connect_project(project_id: str) -> mcp_client.McpBinding:
+    """Open a live MCP session for a Langflow project and register it —
+    shared by the explicit `POST /{thread_id}/mcp` switch below and
+    `routers/chat.py`'s best-effort auto-reconnect (the registry's binding
+    is in-process only and is lost on every mirai-hub-api restart, see
+    `app/mcp_registry.py`, while `Thread.metadata.mcp_project_id` survives).
+    Raises `LookupError` (unknown project) or whatever `mcp_client.connect`
+    raises (transport failure) — callers decide how to surface that.
+    """
+    projects = await langflow_client.list_projects()
+    project = next((p for p in projects if p.id == project_id), None)
+    if project is None:
+        raise LookupError(f"Langflow project {project_id} not found")
+
+    composer = await langflow_client.get_composer_url(project.id)
+    return await mcp_client.connect(
+        project.id,
+        project.name,
+        composer.streamable_http_url,
+        composer.legacy_sse_url,
+        headers=langflow_client.auth_headers(),
+    )
+
+
 @router.post("/{thread_id}/mcp")
 async def set_mcp(
     thread_id: str,
@@ -120,25 +144,17 @@ async def set_mcp(
         )
         return {"connected": False, "toolCount": 0, "projectName": None}
 
-    projects = await langflow_client.list_projects()
-    project = next((p for p in projects if p.id == body.projectId), None)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Langflow project not found")
-
     try:
-        composer = await langflow_client.get_composer_url(project.id)
-        binding = await mcp_client.connect(
-            project.id,
-            project.name,
-            composer.streamable_http_url,
-            composer.legacy_sse_url,
-            headers=langflow_client.auth_headers(),
-        )
+        binding = await connect_project(body.projectId)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Langflow project not found") from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"could not connect to {project.name}: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"could not connect to {body.projectId}: {exc}") from exc
 
     await registry.set(thread_id, binding)
     await threads_db.update_thread(
-        pool, thread_id, metadata_updates={"mcp_project_id": project.id, "mcp_project_name": project.name}
+        pool,
+        thread_id,
+        metadata_updates={"mcp_project_id": binding.project_id, "mcp_project_name": binding.project_name},
     )
-    return {"connected": True, "toolCount": len(binding.tools_openai), "projectName": project.name}
+    return {"connected": True, "toolCount": len(binding.tools_openai), "projectName": binding.project_name}

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { McpProject } from "@/lib/types";
 
@@ -14,9 +15,16 @@ interface McpServerCardProps {
   toolCount: number | null;
   onToggle: () => void;
   pending?: boolean;
+  /** Preserved across the "Chi tiết" link so that screen can still connect
+   * this same thread — see mcp-servers/[projectId]/page.tsx. */
+  threadId?: string;
 }
 
-export function McpServerCard({ project, connected, toolCount, onToggle, pending }: McpServerCardProps) {
+export function McpServerCard({ project, connected, toolCount, onToggle, pending, threadId }: McpServerCardProps) {
+  const detailHref = threadId
+    ? `/chat/mcp-servers/${project.id}?threadId=${threadId}`
+    : `/chat/mcp-servers/${project.id}`;
+
   return (
     <div
       className={cn(
@@ -39,9 +47,9 @@ export function McpServerCard({ project, connected, toolCount, onToggle, pending
         </span>
       </div>
 
-      <span className={cn("text-[12.5px]", toolCount !== null ? "text-muted-foreground" : "italic text-muted-foreground/70")}>
-        {toolCount !== null ? `${toolCount} tool khả dụng` : connected ? "Đã kết nối" : "Kết nối để xem số tool"}
-      </span>
+      <Link href={detailHref} className="self-start text-[12.5px] font-semibold text-primary hover:underline">
+        {toolCount !== null ? `${toolCount} tool khả dụng — xem chi tiết` : "Xem danh sách tool"}
+      </Link>
 
       <div className="mt-auto flex items-center justify-between pt-1">
         <button

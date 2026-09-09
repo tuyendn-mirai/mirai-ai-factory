@@ -13,7 +13,11 @@ export function ThreadList({ activeThreadId }: ThreadListProps) {
   const groups = groupThreadsByDate(threads);
 
   return (
-    <div className="mt-[18px] flex flex-1 flex-col gap-3.5 overflow-y-auto">
+    // min-h-0 overrides the flex item's default min-height:auto -- without
+    // it, this flex-1 column refuses to shrink below its own (long) content
+    // height, so overflow-y-auto never actually engages and the whole page
+    // scrolls instead of just this list.
+    <div className="mt-[18px] flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto">
       {groups.map((group) => (
         <ThreadGroup key={group.name} group={group} activeThreadId={activeThreadId} />
       ))}

@@ -37,7 +37,10 @@ export default function EmptyChatPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    // min-h-0: see the same fix on chat/[threadId]/page.tsx -- the (chat)
+    // layout wraps this in an identical, stretched flex-col div, and
+    // without it this div refuses to shrink below its content.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <TopBar title="New chat" />
       <EmptyState />
       <Composer onSend={handleSend} ensureThreadId={ensureThreadId} streaming={false} />

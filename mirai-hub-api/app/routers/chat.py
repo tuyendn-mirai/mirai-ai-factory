@@ -22,6 +22,7 @@ from app import chat_loop
 from app.db import threads as threads_db
 from app.deps import CurrentUser, get_current_user, get_db_pool
 from app.mcp_registry import registry
+from app.routers import threads as threads_router
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,25 @@ async def post_message(
     metadata = thread["metadata"] or {}
     model = metadata.get("llmModel") or settings.llm_model
     binding = await registry.get(thread_id)
+
+    # The registry is in-process only and empties on every mirai-hub-api
+    # restart (see app/mcp_registry.py), while the thread's intent to be
+    # bound to a project survives in Postgres -- without this, a backend
+    # restart silently drops tool access for every thread that had one:
+    # `binding` stays None forever, the LLM is never even offered the
+    # project's tools, and nothing in the UI makes that obvious. Best-effort
+    # only: a failure here shouldn't block the turn, just leave it
+    # tool-less exactly as it already behaves for threads with no MCP
+    # project at all.
+    mcp_project_id = metadata.get("mcp_project_id")
+    if binding is None and mcp_project_id:
+        try:
+            binding = await threads_router.connect_project(mcp_project_id)
+            await registry.set(thread_id, binding)
+        except Exception:
+            logger.warning(
+                "Auto-reconnect to MCP project %s failed for thread %s", mcp_project_id, thread_id, exc_info=True
+            )
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 

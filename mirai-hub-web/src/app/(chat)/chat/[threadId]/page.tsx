@@ -10,9 +10,19 @@ import { useThreadStream } from "@/hooks/useThreadStream";
 import { popPendingMessage } from "@/lib/pending-message";
 import type { PendingAttachment } from "@/lib/types";
 
+// Next.js reuses this component across /chat/A -> /chat/B navigations (same
+// route pattern, no remount), so every hook here keeps state across
+// threads unless forced to reset. `key={threadId}` below remounts the
+// whole subtree per thread instead of patching each hook individually —
+// otherwise useThreadStream's in-flight streaming state, TopBar's rename
+// draft, and Composer's unsent text all leak from the thread you left into
+// the one you switched to.
 export default function ThreadPage() {
   const params = useParams<{ threadId: string }>();
-  const threadId = params.threadId;
+  return <ThreadPageInner key={params.threadId} threadId={params.threadId} />;
+}
+
+function ThreadPageInner({ threadId }: { threadId: string }) {
   const router = useRouter();
 
   const thread = useThreadQuery(threadId);
@@ -59,7 +69,14 @@ export default function ThreadPage() {
   const title = thread.data?.name ?? "…";
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    // min-h-0: the (chat) layout wraps this in an identical flex-col div
+    // (`flex min-w-0 flex-1 flex-col`, stretched to a definite height by
+    // the outer h-screen row) -- as ITS single child, this div's own
+    // default min-height:auto still lets it refuse to shrink below the
+    // full conversation's height, so MessageList's overflow-y-auto never
+    // gets a bounded box and the whole document scrolls, dragging the
+    // fixed-width sidebar off-screen with it.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <TopBar
         title={title}
         onRename={(name) => updateThread.mutate({ name })}
@@ -69,8 +86,8 @@ export default function ThreadPage() {
         messages={thread.data?.messages ?? []}
         mcpProjectName={thread.data?.mcpProjectName ?? null}
         streaming={stream.streaming}
-        streamingText={stream.assistantText}
-        streamingToolSteps={stream.toolSteps}
+        turnItems={stream.turnItems}
+        pendingUserMessage={stream.pendingUserMessage}
       />
       {stream.error && (
         <p className="px-8 pb-2 text-center text-[12.5px] text-destructive">{stream.error}</p>

@@ -6,6 +6,7 @@
 import type {
   McpConnectResult,
   McpProject,
+  McpTool,
   ThreadDetail,
   ThreadSummary,
   User,
@@ -51,6 +52,11 @@ export async function fetchModels(): Promise<string[]> {
 
 export async function fetchMcpProjects(): Promise<McpProject[]> {
   const res = await fetch("/api/mcp/projects");
+  return json(res);
+}
+
+export async function fetchMcpProjectTools(projectId: string): Promise<McpTool[]> {
+  const res = await fetch(`/api/mcp/projects/${projectId}/tools`);
   return json(res);
 }
 

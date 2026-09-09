@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface TopBarProps {
@@ -12,6 +12,14 @@ interface TopBarProps {
 export function TopBar({ title, onRename, onDelete }: TopBarProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
+
+  // `title` arrives as a "…" placeholder before the thread query resolves,
+  // then updates to the real name — `useState(title)` only reads that
+  // initial value once, so without this the rename input would still show
+  // "…" the first time you open it right after the real title loads.
+  useEffect(() => {
+    if (!editing) setDraft(title);
+  }, [title, editing]);
 
   function commit() {
     setEditing(false);

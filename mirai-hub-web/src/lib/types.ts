@@ -50,6 +50,18 @@ export interface McpProject {
   name: string;
 }
 
+export interface McpTool {
+  id: string;
+  name: string;
+  actionName: string;
+  description: string;
+  mcpEnabled: boolean;
+  /** JSON Schema for the tool's arguments, from a live MCP session — null
+   * when the tool is MCP-disabled or the schema fetch degraded (see
+   * mirai-hub-api's GET /api/mcp/projects/{id}/tools). */
+  parameters: Record<string, unknown> | null;
+}
+
 export interface McpConnectResult {
   connected: boolean;
   toolCount: number | null;
