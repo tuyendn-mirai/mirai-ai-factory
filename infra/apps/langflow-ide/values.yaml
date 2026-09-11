@@ -278,7 +278,7 @@ langflow:
     superuser: "admin"
     superuserPassword: "Adgjmptw1"
     secretKey: "_amV3KBbYmcoDhncCu0fMzovj6KsyLVwkHWfN9LF0L4="
-    newUserIsActive: false
+    newUserIsActive: true
 
   frontend:
     enabled: true
