@@ -292,7 +292,12 @@ langflow:
     image:
       repository: langflowai/langflow-frontend
       imagePullPolicy: IfNotPresent
-      tag: "1.12.1"
+      # 2026-09-14: langflowai/langflow-frontend KHÔNG có tag "1.12.1" trên
+      # Docker Hub (repo riêng này dừng ở "1.12.0", trùng "latest") dù
+      # langflowai/langflow (backend) đã có 1.12.1 — gây ImagePullBackOff.
+      # Giữ frontend ở 1.12.0 cho tới khi maintainer publish tag khớp;
+      # backend/global vẫn ở 1.12.1 (đã verify tag đó tồn tại và pull được).
+      tag: "1.12.0"
     resources:
       requests:
         cpu: 0.3
